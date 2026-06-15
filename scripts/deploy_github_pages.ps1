@@ -29,7 +29,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $visibility = if ($Private) { "--private" } else { "--public" }
-if (!(git remote get-url origin 2>$null)) {
+$remotes = @(git remote)
+if ($remotes -notcontains "origin") {
   & $gh repo create $RepoName $visibility --source . --remote origin --push
 } else {
   git push -u origin main
