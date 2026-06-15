@@ -5,6 +5,7 @@
   const STORAGE_PREFIX = 'diet-studio:v2';
   const CURRENT_PROFILE_KEY = 'diet-studio:current-profile';
   const REMOTE_TABLE = 'diet_profiles';
+  const ASSIGNMENTS_TABLE = 'profile_assignments';
   const PROFILES = [
     { id: 'wiktor', name: 'Wiktor' },
     { id: 'magda', name: 'Magda' },
@@ -73,6 +74,7 @@
   let remoteSaveTimer = 0;
   let supabaseClient = null;
   let syncSession = null;
+  let currentProfileAssignment = null;
   let isRemoteLoading = false;
 
   const $ = (id) => document.getElementById(id);
@@ -82,13 +84,12 @@
   async function init() {
     bindEvents();
     initSupabaseClient();
-    $('profile-select').value = currentProfileId;
     $('selected-date').value = currentDate;
     $('xlsx-status').textContent = window.XLSX ? 'Parser Excela gotowy' : 'CSV gotowe';
     updateSyncUI();
     render();
     await refreshSupabaseSession();
-    if (canSync()) await loadRemoteProfile(currentProfileId);
+    if (canSync()) await loadAssignedProfile();
     registerServiceWorker();
   }
 
@@ -97,7 +98,6 @@
       button.addEventListener('click', () => switchView(button.dataset.view));
     });
 
-    $('profile-select').addEventListener('change', (event) => switchProfile(event.target.value));
     $('prev-day').addEventListener('click', () => shiftDate(-1));
     $('next-day').addEventListener('click', () => shiftDate(1));
     $('today-button').addEventListener('click', () => {
@@ -162,8 +162,8 @@
   }
 
   function render() {
-    $('profile-select').value = currentProfileId;
     $('selected-date').value = currentDate;
+    renderProfileBadge();
     renderSummary();
     renderDatalist();
     renderDiary();
@@ -212,7 +212,20 @@
   }
 
   function profileName(profileId = currentProfileId) {
+    if (currentProfileAssignment && currentProfileAssignment.profile_id === profileId) {
+      return currentProfileAssignment.name || profileById(profileId).name;
+    }
     return profileById(profileId).name;
+  }
+
+  function renderProfileBadge() {
+    const badge = $('profile-badge');
+    const nameNode = $('profile-name');
+    if (!badge || !nameNode) return;
+
+    const visible = Boolean(syncSession && currentProfileAssignment);
+    badge.hidden = !visible;
+    if (visible) nameNode.textContent = profileName();
   }
 
   function loadCurrentProfileId() {
@@ -234,8 +247,13 @@
     });
     supabaseClient.auth.onAuthStateChange(async (_event, session) => {
       syncSession = session;
-      updateSyncUI();
-      if (canSync()) await loadRemoteProfile(currentProfileId);
+      if (canSync()) {
+        await loadAssignedProfile();
+      } else {
+        currentProfileAssignment = null;
+        updateSyncUI();
+        renderProfileBadge();
+      }
     });
   }
 
@@ -261,10 +279,11 @@
     if (!syncStatus || !authState || !syncNote) return;
     const appShell = document.querySelector('.app-shell');
     const authGate = $('auth-gate');
+    renderProfileBadge();
 
     syncStatus.classList.remove('online', 'error');
     authState.classList.remove('online', 'error');
-    const locked = Boolean(supabaseClient && !syncSession);
+    const locked = Boolean(supabaseClient && (!syncSession || !currentProfileAssignment));
     if (appShell) appShell.classList.toggle('locked', locked);
     if (authGate) authGate.hidden = !locked;
 
@@ -279,6 +298,15 @@
       syncStatus.textContent = 'Lokalnie';
       authState.textContent = 'Niezalogowano';
       syncNote.textContent = 'Zaloguj się do rodzinnego konta, żeby zapisywać dane w chmurze.';
+      return;
+    }
+
+    if (!currentProfileAssignment) {
+      syncStatus.textContent = isRemoteLoading ? 'Synchronizacja' : 'Brak profilu';
+      authState.textContent = syncSession.user.email || 'Zalogowano';
+      syncStatus.classList.add('error');
+      authState.classList.add('error');
+      syncNote.textContent = 'Ten email nie ma przypisanego profilu. Dodaj wpis w tabeli profile_assignments.';
       return;
     }
 
@@ -311,7 +339,7 @@
     }
     syncSession = data.session;
     updateSyncUI();
-    await loadRemoteProfile(currentProfileId);
+    await loadAssignedProfile();
     toast('Zalogowano i włączono synchronizację.');
   }
 
@@ -342,6 +370,7 @@
       return;
     }
     syncSession = data.session;
+    if (data.session) await loadAssignedProfile();
     updateSyncUI();
     toast(data.session ? 'Konto utworzone i zalogowane.' : 'Konto utworzone. Sprawdź email, jeśli Supabase wymaga potwierdzenia.');
   }
@@ -369,12 +398,51 @@
       return;
     }
     syncSession = null;
+    currentProfileAssignment = null;
     updateSyncUI();
     toast('Wylogowano. Dane lokalne nadal są na tym urządzeniu.');
   }
 
+  async function loadAssignedProfile() {
+    if (!canSync()) return;
+
+    isRemoteLoading = true;
+    updateSyncUI();
+
+    const { data, error } = await supabaseClient
+      .from(ASSIGNMENTS_TABLE)
+      .select('profile_id, name')
+      .maybeSingle();
+
+    if (error) {
+      currentProfileAssignment = null;
+      isRemoteLoading = false;
+      updateSyncUI();
+      toast(`Blad profilu: ${error.message}`);
+      return;
+    }
+
+    if (!data || !profileById(data.profile_id)) {
+      currentProfileAssignment = null;
+      isRemoteLoading = false;
+      updateSyncUI();
+      toast('Nie znaleziono przypisanego profilu dla tego emaila.');
+      return;
+    }
+
+    currentProfileAssignment = data;
+    currentProfileId = data.profile_id;
+    localStorage.setItem(CURRENT_PROFILE_KEY, currentProfileId);
+    state = loadState(currentProfileId);
+    aiDraft = null;
+    clearImport();
+
+    await loadRemoteProfile(currentProfileId);
+  }
+
   async function loadRemoteProfile(profileId) {
     if (!canSync()) return;
+    if (!currentProfileAssignment || currentProfileAssignment.profile_id !== profileId) return;
 
     isRemoteLoading = true;
     updateSyncUI();
@@ -401,11 +469,12 @@
     }
 
     await saveRemoteProfile(profile.id, state);
+    render();
     updateSyncUI();
   }
 
   function scheduleRemoteSave() {
-    if (!canSync() || isRemoteLoading) return;
+    if (!canSync() || !currentProfileAssignment || isRemoteLoading) return;
     clearTimeout(remoteSaveTimer);
     const profileId = currentProfileId;
     const snapshot = structuredCloneSafe(state);
@@ -416,6 +485,7 @@
 
   async function saveRemoteProfile(profileId, snapshot) {
     if (!canSync()) return;
+    if (!currentProfileAssignment || currentProfileAssignment.profile_id !== profileId) return;
     const profile = profileById(profileId);
     const { error } = await supabaseClient
       .from(REMOTE_TABLE)

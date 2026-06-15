@@ -27,14 +27,10 @@
         </div>
 
         <div class="date-switcher" aria-label="Wybrana data dziennika">
-          <label class="profile-select">
+          <div class="profile-badge" id="profile-badge" hidden>
             <span>Profil</span>
-            <select id="profile-select">
-              <option value="wiktor">Wiktor</option>
-              <option value="magda">Magda</option>
-              <option value="agnieszka">Agnieszka</option>
-            </select>
-          </label>
+            <strong id="profile-name">-</strong>
+          </div>
           <span id="sync-status" class="sync-status">Lokalnie</span>
           <button class="icon-button" id="prev-day" type="button" aria-label="Poprzedni dzień" title="Poprzedni dzień">
             <i data-lucide="chevron-left"></i>

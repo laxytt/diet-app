@@ -109,20 +109,26 @@ svg {
   flex-wrap: wrap;
 }
 
-.profile-select {
+.profile-badge {
   display: flex;
   align-items: center;
   gap: 7px;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 0 12px;
 }
 
-.profile-select span {
+.profile-badge span {
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 800;
 }
 
-.profile-select select {
-  min-width: 132px;
+.profile-badge strong {
+  color: var(--ink);
+  font-weight: 850;
 }
 
 .sync-status {
