@@ -119,6 +119,8 @@
     $('entry-form').addEventListener('submit', addDiaryEntry);
     $('ai-analyze-button').addEventListener('click', analyzeMealFromText);
     $('ai-result').addEventListener('click', handleAIResultAction);
+    $('gate-auth-form').addEventListener('submit', loginUser);
+    $('gate-signup-button').addEventListener('click', signUpUser);
     ['entry-food', 'entry-grams', 'entry-calories', 'entry-protein', 'entry-carbs', 'entry-fat'].forEach((id) => {
       $(id).addEventListener('input', updateEntryPreview);
     });
@@ -222,7 +224,14 @@
     const config = window.DIET_APP_CONFIG || {};
     if (!config.supabaseUrl || !config.supabaseAnonKey || !window.supabase) return;
 
-    supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+    supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: 'diet-studio:supabase-auth'
+      }
+    });
     supabaseClient.auth.onAuthStateChange(async (_event, session) => {
       syncSession = session;
       updateSyncUI();
@@ -250,9 +259,14 @@
     const authState = $('auth-state');
     const syncNote = $('sync-note');
     if (!syncStatus || !authState || !syncNote) return;
+    const appShell = document.querySelector('.app-shell');
+    const authGate = $('auth-gate');
 
     syncStatus.classList.remove('online', 'error');
     authState.classList.remove('online', 'error');
+    const locked = Boolean(supabaseClient && !syncSession);
+    if (appShell) appShell.classList.toggle('locked', locked);
+    if (authGate) authGate.hidden = !locked;
 
     if (!supabaseClient) {
       syncStatus.textContent = 'Lokalnie';
@@ -282,8 +296,9 @@
       return;
     }
 
-    const email = $('auth-email').value.trim();
-    const password = $('auth-password').value;
+    const credentials = readAuthCredentials(event.target && event.target.id === 'gate-auth-form' ? 'gate' : 'settings');
+    const email = credentials.email;
+    const password = credentials.password;
     if (!email || !password) {
       toast('Podaj email i hasło.');
       return;
@@ -306,14 +321,22 @@
       return;
     }
 
-    const email = $('auth-email').value.trim();
-    const password = $('auth-password').value;
+    const source = document.activeElement && document.activeElement.id === 'gate-signup-button' ? 'gate' : 'settings';
+    const credentials = readAuthCredentials(source);
+    const email = credentials.email;
+    const password = credentials.password;
     if (!email || !password) {
       toast('Podaj email i hasło.');
       return;
     }
 
-    const { data, error } = await supabaseClient.auth.signUp({ email, password });
+    const { data, error } = await supabaseClient.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: authRedirectUrl()
+      }
+    });
     if (error) {
       toast(`Nie udało się utworzyć konta: ${error.message}`);
       return;
@@ -321,6 +344,21 @@
     syncSession = data.session;
     updateSyncUI();
     toast(data.session ? 'Konto utworzone i zalogowane.' : 'Konto utworzone. Sprawdź email, jeśli Supabase wymaga potwierdzenia.');
+  }
+
+  function readAuthCredentials(source) {
+    const prefix = source === 'gate' ? 'gate-' : '';
+    return {
+      email: $(`${prefix}auth-email`).value.trim(),
+      password: $(`${prefix}auth-password`).value
+    };
+  }
+
+  function authRedirectUrl() {
+    const url = new URL(window.location.href);
+    url.hash = '';
+    url.search = '';
+    return url.toString();
   }
 
   async function logoutUser() {

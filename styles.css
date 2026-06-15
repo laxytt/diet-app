@@ -241,6 +241,26 @@ select:focus {
   border-radius: var(--radius);
 }
 
+.app-shell.locked .tabbar,
+.app-shell.locked #main-content {
+  display: none;
+}
+
+.auth-gate {
+  display: grid;
+  place-items: center;
+  min-height: calc(100vh - 150px);
+}
+
+.auth-gate-panel {
+  width: min(520px, 100%);
+}
+
+.auth-gate-panel p {
+  margin: 0 0 14px;
+  color: var(--muted);
+}
+
 .tab-button {
   min-width: 118px;
   min-height: 42px;

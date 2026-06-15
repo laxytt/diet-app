@@ -47,6 +47,37 @@
         </div>
       </header>
 
+      <section class="auth-gate" id="auth-gate" hidden>
+        <div class="panel auth-gate-panel">
+          <div class="panel-heading">
+            <h2>Zaloguj się</h2>
+            <span class="stat-chip">Sync</span>
+          </div>
+          <p>Dane profili są prywatne i widoczne dopiero po zalogowaniu.</p>
+          <form id="gate-auth-form" class="auth-form">
+            <label class="wide">
+              <span>Email</span>
+              <input id="gate-auth-email" type="email" autocomplete="email" placeholder="email@domena.pl">
+            </label>
+            <label class="wide">
+              <span>Hasło</span>
+              <input id="gate-auth-password" type="password" autocomplete="current-password" placeholder="Hasło">
+            </label>
+            <div class="button-row">
+              <button class="primary-button" id="gate-login-button" type="submit">
+                <i data-lucide="log-in"></i>
+                Zaloguj
+              </button>
+              <button class="secondary-button" id="gate-signup-button" type="button">
+                <i data-lucide="user-plus"></i>
+                Utwórz konto
+              </button>
+            </div>
+          </form>
+          <p class="storage-note" id="gate-auth-note">Po potwierdzeniu maila wrócisz na tę stronę.</p>
+        </div>
+      </section>
+
       <nav class="tabbar" aria-label="Sekcje aplikacji">
         <button class="tab-button active" type="button" data-view="diary">
           <i data-lucide="notebook-tabs"></i>
@@ -70,7 +101,7 @@
         </button>
       </nav>
 
-      <main>
+      <main id="main-content">
         <section class="view active" id="view-diary">
           <section class="metric-grid" aria-label="Podsumowanie dnia">
             <article class="metric-card accent-green">
