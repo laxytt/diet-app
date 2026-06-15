@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#2f7d59">
+    <title>Dziennik Diety</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+    <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script defer src="config.js"></script>
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">
+            <i data-lucide="activity"></i>
+          </div>
+          <div>
+            <h1>Dziennik Diety</h1>
+            <p id="today-summary">Panel żywienia</p>
+          </div>
+        </div>
+
+        <div class="date-switcher" aria-label="Wybrana data dziennika">
+          <label class="profile-select">
+            <span>Profil</span>
+            <select id="profile-select">
+              <option value="wiktor">Wiktor</option>
+              <option value="magda">Magda</option>
+              <option value="agnieszka">Agnieszka</option>
+            </select>
+          </label>
+          <span id="sync-status" class="sync-status">Lokalnie</span>
+          <button class="icon-button" id="prev-day" type="button" aria-label="Poprzedni dzień" title="Poprzedni dzień">
+            <i data-lucide="chevron-left"></i>
+          </button>
+          <input id="selected-date" type="date">
+          <button class="icon-button" id="next-day" type="button" aria-label="Następny dzień" title="Następny dzień">
+            <i data-lucide="chevron-right"></i>
+          </button>
+          <button class="ghost-button" id="today-button" type="button">Dziś</button>
+        </div>
+      </header>
+
+      <nav class="tabbar" aria-label="Sekcje aplikacji">
+        <button class="tab-button active" type="button" data-view="diary">
+          <i data-lucide="notebook-tabs"></i>
+          <span>Dziennik</span>
+        </button>
+        <button class="tab-button" type="button" data-view="foods">
+          <i data-lucide="database"></i>
+          <span>Produkty</span>
+        </button>
+        <button class="tab-button" type="button" data-view="trends">
+          <i data-lucide="chart-line"></i>
+          <span>Trendy</span>
+        </button>
+        <button class="tab-button" type="button" data-view="import">
+          <i data-lucide="file-spreadsheet"></i>
+          <span>Import</span>
+        </button>
+        <button class="tab-button" type="button" data-view="settings">
+          <i data-lucide="sliders-horizontal"></i>
+          <span>Ustawienia</span>
+        </button>
+      </nav>
+
+      <main>
+        <section class="view active" id="view-diary">
+          <section class="metric-grid" aria-label="Podsumowanie dnia">
+            <article class="metric-card accent-green">
+              <span class="metric-label">Kalorie</span>
+              <strong id="calories-value">0 / 0</strong>
+              <div class="meter"><span id="calories-meter"></span></div>
+              <small id="calories-remaining">pozostało 0</small>
+            </article>
+            <article class="metric-card accent-coral">
+              <span class="metric-label">Białko</span>
+              <strong id="protein-value">0g / 0g</strong>
+              <div class="meter"><span id="protein-meter"></span></div>
+              <small id="protein-detail">pozostało 0g</small>
+            </article>
+            <article class="metric-card accent-amber">
+              <span class="metric-label">Węglowodany</span>
+              <strong id="carbs-value">0g / 0g</strong>
+              <div class="meter"><span id="carbs-meter"></span></div>
+              <small id="carbs-detail">pozostało 0g</small>
+            </article>
+            <article class="metric-card accent-teal">
+              <span class="metric-label">Tłuszcz</span>
+              <strong id="fat-value">0g / 0g</strong>
+              <div class="meter"><span id="fat-meter"></span></div>
+              <small id="fat-detail">pozostało 0g</small>
+            </article>
+          </section>
+
+          <section class="workspace-grid">
+            <div class="panel add-panel">
+              <div class="panel-heading">
+                <h2>Dodaj posiłek</h2>
+                <button class="icon-button" type="button" id="toggle-manual" aria-label="Wpis ręczny" title="Wpis ręczny">
+                  <i data-lucide="pencil-line"></i>
+                </button>
+              </div>
+
+              <form id="entry-form" class="entry-form">
+                <label>
+                  <span>Posiłek</span>
+                  <select id="entry-meal">
+                    <option value="Breakfast">Śniadanie</option>
+                    <option value="Lunch">Lunch</option>
+                    <option value="Dinner">Obiad</option>
+                    <option value="Snack">Przekąska</option>
+                  </select>
+                </label>
+
+                <label class="wide">
+                  <span>Produkt</span>
+                  <input id="entry-food" list="food-options" placeholder="Wyszukaj albo wpisz produkt">
+                  <datalist id="food-options"></datalist>
+                </label>
+
+                <label>
+                  <span>Ilość</span>
+                  <div class="inline-input">
+                    <input id="entry-grams" type="number" min="1" step="1" value="100">
+                    <span>g</span>
+                  </div>
+                </label>
+
+                <div class="manual-grid collapsed" id="manual-fields">
+                  <label>
+                    <span>Kalorie</span>
+                    <input id="entry-calories" type="number" min="0" step="1">
+                  </label>
+                  <label>
+                    <span>Białko</span>
+                    <input id="entry-protein" type="number" min="0" step="0.1">
+                  </label>
+                  <label>
+                    <span>Węglowodany</span>
+                    <input id="entry-carbs" type="number" min="0" step="0.1">
+                  </label>
+                  <label>
+                    <span>Tłuszcz</span>
+                    <input id="entry-fat" type="number" min="0" step="0.1">
+                  </label>
+                </div>
+
+                <div class="nutrition-preview" id="entry-preview">
+                  <span>0 kcal</span>
+                  <span>0g białka</span>
+                  <span>0g węglowodanów</span>
+                  <span>0g tłuszczu</span>
+                </div>
+
+                <button class="primary-button wide" type="submit">
+                  <i data-lucide="plus"></i>
+                  Dodaj do dziennika
+                </button>
+              </form>
+
+              <div class="ai-meal-panel">
+                <div class="panel-heading compact-heading">
+                  <h3>Opisz posiłek</h3>
+                  <span class="stat-chip">AI</span>
+                </div>
+                <textarea id="ai-meal-text" rows="4" placeholder="Np. sałatka z dwoma łyżkami oleju, 150g kurczaka i kromką chleba"></textarea>
+                <div class="button-row">
+                  <button class="secondary-button" id="ai-analyze-button" type="button">
+                    <i data-lucide="sparkles"></i>
+                    Przelicz z opisu
+                  </button>
+                </div>
+                <div id="ai-result" class="ai-result"></div>
+              </div>
+            </div>
+
+            <div class="panel diary-panel">
+              <div class="panel-heading">
+                <h2>Dziennik dnia</h2>
+                <button class="ghost-button compact" type="button" id="copy-yesterday">
+                  <i data-lucide="copy"></i>
+                  Kopiuj wczoraj
+                </button>
+              </div>
+              <div id="meal-groups" class="meal-groups"></div>
+            </div>
+
+            <div class="panel side-panel">
+              <div class="panel-heading">
+                <h2>Pomiary</h2>
+              </div>
+              <form id="body-form" class="body-form">
+                <label>
+                  <span>Waga</span>
+                  <div class="inline-input">
+                    <input id="weight-input" type="number" min="1" step="0.1">
+                    <span>kg</span>
+                  </div>
+                </label>
+                <label>
+                  <span>Woda</span>
+                  <div class="inline-input">
+                    <input id="water-input" type="number" min="0" step="50">
+                    <span>ml</span>
+                  </div>
+                </label>
+                <button class="secondary-button" type="submit">
+                  <i data-lucide="save"></i>
+                  Zapisz
+                </button>
+              </form>
+              <div class="mini-chart-wrap">
+                <canvas id="week-chart" width="480" height="220"></canvas>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-foods">
+          <section class="workspace-grid foods-layout">
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Baza produktów</h2>
+                <input class="search-input" id="food-search" type="search" placeholder="Szukaj produktów">
+              </div>
+              <div id="food-list" class="food-list"></div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Własny produkt</h2>
+              </div>
+              <form id="food-form" class="food-form">
+                <input type="hidden" id="food-id">
+                <label class="wide">
+                  <span>Nazwa</span>
+                  <input id="food-name" required placeholder="Nazwa produktu">
+                </label>
+                <label>
+                  <span>Porcja</span>
+                  <div class="inline-input">
+                    <input id="food-serving" type="number" min="1" step="1" value="100" required>
+                    <span>g</span>
+                  </div>
+                </label>
+                <label>
+                  <span>Kalorie</span>
+                  <input id="food-calories" type="number" min="0" step="1" required>
+                </label>
+                <label>
+                  <span>Białko</span>
+                  <input id="food-protein" type="number" min="0" step="0.1" required>
+                </label>
+                <label>
+                  <span>Węglowodany</span>
+                  <input id="food-carbs" type="number" min="0" step="0.1" required>
+                </label>
+                <label>
+                  <span>Tłuszcz</span>
+                  <input id="food-fat" type="number" min="0" step="0.1" required>
+                </label>
+                <label>
+                  <span>Błonnik</span>
+                  <input id="food-fiber" type="number" min="0" step="0.1" value="0">
+                </label>
+                <div class="button-row">
+                  <button class="primary-button" type="submit">
+                    <i data-lucide="save"></i>
+                    Zapisz produkt
+                  </button>
+                  <button class="ghost-button" type="button" id="reset-food-form">Wyczyść</button>
+                </div>
+              </form>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-trends">
+          <section class="trend-grid">
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Kalorie</h2>
+                <select id="trend-range">
+                  <option value="7">7 dni</option>
+                  <option value="14">14 dni</option>
+                  <option value="30">30 dni</option>
+                  <option value="90">90 dni</option>
+                </select>
+              </div>
+              <canvas id="calorie-chart" width="900" height="360"></canvas>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Waga</h2>
+                <span id="weight-trend-label" class="stat-chip">Brak trendu</span>
+              </div>
+              <canvas id="weight-chart" width="900" height="360"></canvas>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Podział makro</h2>
+                <span id="macro-split-label" class="stat-chip">Dzisiaj</span>
+              </div>
+              <canvas id="macro-chart" width="520" height="300"></canvas>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-import">
+          <section class="import-layout">
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Import dziennika</h2>
+                <span id="xlsx-status" class="stat-chip">Ładowanie parsera Excela</span>
+              </div>
+              <div class="import-drop">
+                <input id="import-file" type="file" accept=".xlsx,.xls,.csv,text/csv">
+                <div>
+                  <strong>Excel albo CSV</strong>
+                  <span id="import-file-name">Nie wybrano pliku</span>
+                </div>
+              </div>
+              <div class="mapping-grid" id="mapping-grid"></div>
+              <div class="button-row">
+                <button class="primary-button" id="import-button" type="button" disabled>
+                  <i data-lucide="upload"></i>
+                  Importuj wiersze
+                </button>
+                <button class="ghost-button" id="clear-import" type="button">Wyczyść</button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Podgląd</h2>
+                <span id="import-preview-count" class="stat-chip">0 wierszy</span>
+              </div>
+              <div class="table-wrap">
+                <table id="import-preview-table">
+                  <thead></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-settings">
+          <section class="settings-grid">
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Synchronizacja</h2>
+                <span id="auth-state" class="stat-chip">Lokalnie</span>
+              </div>
+              <form id="auth-form" class="auth-form">
+                <label class="wide">
+                  <span>Email</span>
+                  <input id="auth-email" type="email" autocomplete="email" placeholder="email@domena.pl">
+                </label>
+                <label class="wide">
+                  <span>Hasło</span>
+                  <input id="auth-password" type="password" autocomplete="current-password" placeholder="Hasło do rodzinnego konta">
+                </label>
+                <div class="button-row">
+                  <button class="primary-button" id="login-button" type="submit">
+                    <i data-lucide="log-in"></i>
+                    Zaloguj
+                  </button>
+                  <button class="secondary-button" id="signup-button" type="button">
+                    <i data-lucide="user-plus"></i>
+                    Utwórz konto
+                  </button>
+                  <button class="ghost-button" id="logout-button" type="button">
+                    <i data-lucide="log-out"></i>
+                    Wyloguj
+                  </button>
+                </div>
+              </form>
+              <p class="storage-note" id="sync-note"></p>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Cele</h2>
+              </div>
+              <form id="settings-form" class="settings-form">
+                <label>
+                  <span>Kalorie</span>
+                  <input id="target-calories" type="number" min="500" step="10">
+                </label>
+                <label>
+                  <span>Białko</span>
+                  <input id="target-protein" type="number" min="0" step="1">
+                </label>
+                <label>
+                  <span>Węglowodany</span>
+                  <input id="target-carbs" type="number" min="0" step="1">
+                </label>
+                <label>
+                  <span>Tłuszcz</span>
+                  <input id="target-fat" type="number" min="0" step="1">
+                </label>
+                <label>
+                  <span>Woda</span>
+                  <input id="target-water" type="number" min="0" step="50">
+                </label>
+                <button class="primary-button" type="submit">
+                  <i data-lucide="save"></i>
+                  Zapisz cele
+                </button>
+              </form>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Dane</h2>
+              </div>
+              <div class="data-actions">
+                <button class="secondary-button" type="button" id="export-json">
+                  <i data-lucide="download"></i>
+                  Eksport JSON
+                </button>
+                <button class="secondary-button" type="button" id="export-csv">
+                  <i data-lucide="table"></i>
+                  Eksport CSV
+                </button>
+                <button class="danger-button" type="button" id="reset-app">
+                  <i data-lucide="trash-2"></i>
+                  Reset profilu
+                </button>
+              </div>
+              <p class="storage-note" id="storage-note"></p>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast-area" id="toast-area" aria-live="polite" aria-atomic="true"></div>
+  </body>
+</html>
