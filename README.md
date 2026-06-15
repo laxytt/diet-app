@@ -47,6 +47,14 @@ window.DIET_APP_CONFIG = {
 
 Supabase anon key może być publiczny, jeśli RLS jest włączone. Bezpieczeństwo robią polityki z `schema.sql`, które ograniczają odczyt i zapis do zalogowanego użytkownika.
 
+Możesz też wygenerować `config.js` skryptem:
+
+```powershell
+.\scripts\configure_frontend.ps1 `
+  -SupabaseUrl "https://YOUR_PROJECT_REF.supabase.co" `
+  -SupabaseAnonKey "YOUR_SUPABASE_ANON_KEY"
+```
+
 ## Konfiguracja AI
 
 Funkcja jest w [supabase/functions/analyze-meal/index.ts](supabase/functions/analyze-meal/index.ts).
@@ -59,6 +67,14 @@ supabase secrets set OPENAI_API_KEY=sk-...
 supabase secrets set OPENAI_MODEL=gpt-5.4-mini
 ```
 
+W tym repo jest gotowy skrypt:
+
+```powershell
+.\.tools\supabase\supabase.exe login
+$env:OPENAI_API_KEY = "sk-..."
+.\scripts\deploy_supabase.ps1 -ProjectRef "YOUR_PROJECT_REF"
+```
+
 `OPENAI_MODEL` możesz zmienić na tańszy model dostępny na Twoim koncie, jeśli jakość estymacji będzie wystarczająca.
 
 ## Uruchomienie lokalne
@@ -66,6 +82,18 @@ supabase secrets set OPENAI_MODEL=gpt-5.4-mini
 Otwórz `index.html` bezpośrednio w przeglądarce. Synchronizacja i AI będą działać dopiero po wpisaniu danych Supabase w `config.js`.
 
 Tryb instalacji/offline działa najlepiej, gdy folder jest serwowany przez HTTP, np. z prostego statycznego serwera.
+
+Lokalny serwer:
+
+```powershell
+.\scripts\serve.ps1
+```
+
+Kontrola projektu:
+
+```powershell
+.\scripts\check.ps1
+```
 
 ## Deployment na GitHub Pages
 
@@ -84,3 +112,10 @@ Wrzuć do repozytorium:
 Folder `supabase/` nie musi być publikowany jako strona, ale trzymaj go w repo jako infrastrukturę projektu.
 
 W GitHubie wejdź w `Settings -> Pages`, ustaw źródło na branch z tymi plikami, np. `main`, i folder `/root`.
+
+Albo użyj przygotowanego skryptu:
+
+```powershell
+.\.tools\gh\bin\gh.exe auth login
+.\scripts\deploy_github_pages.ps1 -RepoName "diet-app"
+```

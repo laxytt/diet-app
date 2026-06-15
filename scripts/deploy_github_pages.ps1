@@ -23,10 +23,17 @@ if (!(Test-Path ".git")) {
 }
 
 git add index.html styles.css app.js config.js manifest.webmanifest sw.js icon.svg README.md supabase scripts .gitignore
-git commit -m "Prepare diet app deployment"
+git diff --cached --quiet
+if ($LASTEXITCODE -ne 0) {
+  git commit -m "Prepare diet app deployment"
+}
 
 $visibility = if ($Private) { "--private" } else { "--public" }
-& $gh repo create $RepoName $visibility --source . --remote origin --push
+if (!(git remote get-url origin 2>$null)) {
+  & $gh repo create $RepoName $visibility --source . --remote origin --push
+} else {
+  git push -u origin main
+}
 
 $repoFullName = (& $gh repo view --json nameWithOwner --jq ".nameWithOwner").Trim()
 $body = @{ source = @{ branch = "main"; path = "/" } } | ConvertTo-Json -Depth 4
