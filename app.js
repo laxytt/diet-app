@@ -23,8 +23,8 @@
     { value: 'szt', label: 'szt.' },
     { value: 'porcja', label: 'porcja' },
     { value: 'paczka', label: 'paczka' },
-    { value: 'lyzka', label: 'lyzka' },
-    { value: 'lyzeczka', label: 'lyzeczka' },
+    { value: 'lyzka', label: 'łyżka' },
+    { value: 'lyzeczka', label: 'łyżeczka' },
     { value: 'kromka', label: 'kromka' }
   ];
   const IMPORT_FIELDS = [
