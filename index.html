@@ -156,11 +156,19 @@
                   <span>Ilość</span>
                   <div class="inline-input">
                     <input id="entry-grams" type="number" min="1" step="1" value="100">
-                    <span>g</span>
+                    <select id="entry-unit" aria-label="Jednostka">
+                      <option value="g">g</option>
+                      <option value="szt">szt.</option>
+                      <option value="porcja">porcja</option>
+                      <option value="paczka">paczka</option>
+                      <option value="lyzka">lyzka</option>
+                      <option value="lyzeczka">lyzeczka</option>
+                      <option value="kromka">kromka</option>
+                    </select>
                   </div>
                 </label>
 
-                <div class="manual-grid collapsed" id="manual-fields">
+                <div class="manual-grid" id="manual-fields">
                   <label>
                     <span>Kalorie</span>
                     <input id="entry-calories" type="number" min="0" step="1">
@@ -274,7 +282,15 @@
                   <span>Porcja</span>
                   <div class="inline-input">
                     <input id="food-serving" type="number" min="1" step="1" value="100" required>
-                    <span>g</span>
+                    <select id="food-unit" aria-label="Jednostka porcji">
+                      <option value="g">g</option>
+                      <option value="szt">szt.</option>
+                      <option value="porcja">porcja</option>
+                      <option value="paczka">paczka</option>
+                      <option value="lyzka">lyzka</option>
+                      <option value="lyzeczka">lyzeczka</option>
+                      <option value="kromka">kromka</option>
+                    </select>
                   </div>
                 </label>
                 <label>

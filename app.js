@@ -18,6 +18,15 @@
     Dinner: 'Obiad',
     Snack: 'Przekąska'
   };
+  const UNIT_OPTIONS = [
+    { value: 'g', label: 'g' },
+    { value: 'szt', label: 'szt.' },
+    { value: 'porcja', label: 'porcja' },
+    { value: 'paczka', label: 'paczka' },
+    { value: 'lyzka', label: 'lyzka' },
+    { value: 'lyzeczka', label: 'lyzeczka' },
+    { value: 'kromka', label: 'kromka' }
+  ];
   const IMPORT_FIELDS = [
     { key: 'date', label: 'Data', aliases: ['date', 'day', 'data', 'dzien'] },
     { key: 'meal', label: 'Posiłek', aliases: ['meal', 'posilek', 'pora', 'type'] },
@@ -67,10 +76,11 @@
   migrateLegacyState();
   let state = loadState(currentProfileId);
   let currentDate = todayISO();
-  let manualMode = false;
+  let manualMode = true;
   let importState = null;
   let aiDraft = null;
   let chartTimer = 0;
+  let chartTooltip = null;
   let remoteSaveTimer = 0;
   let supabaseClient = null;
   let syncSession = null;
@@ -84,6 +94,7 @@
   async function init() {
     bindEvents();
     initSupabaseClient();
+    updateManualControls();
     $('selected-date').value = currentDate;
     $('xlsx-status').textContent = window.XLSX ? 'Parser Excela gotowy' : 'CSV gotowe';
     updateSyncUI();
@@ -111,8 +122,7 @@
 
     $('toggle-manual').addEventListener('click', () => {
       manualMode = !manualMode;
-      $('manual-fields').classList.toggle('collapsed', !manualMode);
-      $('toggle-manual').classList.toggle('is-active', manualMode);
+      updateManualControls();
       updateEntryPreview();
     });
 
@@ -121,8 +131,17 @@
     $('ai-result').addEventListener('click', handleAIResultAction);
     $('gate-auth-form').addEventListener('submit', loginUser);
     $('gate-signup-button').addEventListener('click', signUpUser);
-    ['entry-food', 'entry-grams', 'entry-calories', 'entry-protein', 'entry-carbs', 'entry-fat'].forEach((id) => {
+    ['entry-food', 'entry-grams', 'entry-unit', 'entry-calories', 'entry-protein', 'entry-carbs', 'entry-fat'].forEach((id) => {
       $(id).addEventListener('input', updateEntryPreview);
+    });
+    $('entry-unit').addEventListener('change', updateEntryPreview);
+    ['entry-calories', 'entry-protein', 'entry-carbs', 'entry-fat'].forEach((id) => {
+      $(id).addEventListener('input', () => {
+        if (!manualMode) {
+          manualMode = true;
+          updateManualControls();
+        }
+      });
     });
 
     $('meal-groups').addEventListener('click', (event) => {
@@ -176,6 +195,13 @@
     updateEntryPreview();
     renderCharts();
     refreshIcons();
+  }
+
+  function updateManualControls() {
+    const manualFields = $('manual-fields');
+    const toggle = $('toggle-manual');
+    if (manualFields) manualFields.classList.toggle('collapsed', !manualMode);
+    if (toggle) toggle.classList.toggle('is-active', manualMode);
   }
 
   function switchView(view) {
@@ -540,6 +566,42 @@
     return MEAL_LABELS[meal] || meal || MEAL_LABELS.Snack;
   }
 
+  function unitLabel(unit) {
+    return (UNIT_OPTIONS.find((item) => item.value === unit) || UNIT_OPTIONS[0]).label;
+  }
+
+  function selectedEntryUnit() {
+    const unit = $('entry-unit') ? $('entry-unit').value : 'g';
+    return UNIT_OPTIONS.some((item) => item.value === unit) ? unit : 'g';
+  }
+
+  function foodServingUnit(food) {
+    return food && food.servingUnit ? food.servingUnit : 'g';
+  }
+
+  function foodServingAmount(food) {
+    return numberValue(food && food.servingGram, 100) || 100;
+  }
+
+  function formatAmount(amount, unit) {
+    return `${round1(amount)} ${unitLabel(unit || 'g')}`;
+  }
+
+  function formatFoodServing(food) {
+    return formatAmount(foodServingAmount(food), foodServingUnit(food));
+  }
+
+  function formatEntryAmount(entry) {
+    if (entry.amount !== undefined && entry.amount !== null) return formatAmount(entry.amount, entry.unit || 'g');
+    return formatAmount(numberValue(entry.grams, 0), 'g');
+  }
+
+  function equivalentGrams(food, amount, unit) {
+    if (unit === 'g') return amount;
+    if (food && foodServingUnit(food) === 'g') return amount * foodServingAmount(food);
+    return amount;
+  }
+
   function renderDiary() {
     const entries = entriesForDate(currentDate);
     const html = MEALS.map((meal) => {
@@ -567,7 +629,7 @@
       <div class="entry-row">
         <div>
           <strong title="${escapeHTML(entry.foodName)}">${escapeHTML(entry.foodName)}</strong>
-          <small>${round1(entry.grams)}g</small>
+          <small>${formatEntryAmount(entry)}</small>
         </div>
         <span class="macro-number">${Math.round(entry.calories)}</span>
         <span class="macro-number">${round1(entry.protein)}b</span>
@@ -582,8 +644,9 @@
 
   function updateEntryPreview() {
     const foodName = $('entry-food').value.trim();
-    const grams = numberValue($('entry-grams').value, 100);
-    const nutrition = entryNutritionFromForm(foodName, grams);
+    const amount = numberValue($('entry-grams').value, 100);
+    const unit = selectedEntryUnit();
+    const nutrition = entryNutritionFromForm(foodName, amount, unit);
     const values = [
       `${Math.round(nutrition.calories)} kcal`,
       `${round1(nutrition.protein)}g białka`,
@@ -597,19 +660,20 @@
     event.preventDefault();
 
     const foodName = $('entry-food').value.trim();
-    const grams = numberValue($('entry-grams').value, 100);
+    const amount = numberValue($('entry-grams').value, 100);
+    const unit = selectedEntryUnit();
     if (!foodName) {
       toast('Dodaj nazwę produktu.');
       return;
     }
 
     const matchedFood = findFoodByName(foodName);
-    const nutrition = entryNutritionFromForm(foodName, grams);
+    const nutrition = entryNutritionFromForm(foodName, amount, unit);
     const hasNutrition = nutrition.calories > 0 || nutrition.protein > 0 || nutrition.carbs > 0 || nutrition.fat > 0;
 
     if (!matchedFood && !hasNutrition) {
       manualMode = true;
-      $('manual-fields').classList.remove('collapsed');
+      updateManualControls();
       toast('Dodaj kalorie albo makro dla tego produktu.');
       return;
     }
@@ -620,7 +684,9 @@
       meal: $('entry-meal').value,
       foodId: matchedFood ? matchedFood.id : null,
       foodName: matchedFood ? matchedFood.name : foodName,
-      grams,
+      amount,
+      unit,
+      grams: equivalentGrams(matchedFood, amount, unit),
       calories: nutrition.calories,
       protein: nutrition.protein,
       carbs: nutrition.carbs,
@@ -628,23 +694,26 @@
       createdAt: new Date().toISOString()
     };
 
-    state.entries.push(entry);
-
     if (!matchedFood && hasNutrition) {
-      addImportedFoodIfMissing({
+      const createdFood = addImportedFoodIfMissing({
         name: foodName,
-        servingGram: grams || 100,
+        servingGram: amount || 100,
+        servingUnit: unit,
         calories: nutrition.calories,
         protein: nutrition.protein,
         carbs: nutrition.carbs,
         fat: nutrition.fat,
         fiber: 0
       });
+      entry.foodId = createdFood ? createdFood.id : null;
     }
+
+    state.entries.push(entry);
 
     saveState();
     $('entry-food').value = '';
     $('entry-grams').value = '100';
+    $('entry-unit').value = 'g';
     ['entry-calories', 'entry-protein', 'entry-carbs', 'entry-fat'].forEach((id) => {
       $(id).value = '';
     });
@@ -790,6 +859,7 @@
       const food = existingFood || addImportedFoodIfMissing({
         name: item.name,
         servingGram: item.grams || 100,
+        servingUnit: 'g',
         calories: item.calories,
         protein: item.protein,
         carbs: item.carbs,
@@ -803,6 +873,8 @@
         meal,
         foodId: food ? food.id : null,
         foodName: item.name,
+        amount: item.grams || 100,
+        unit: 'g',
         grams: item.grams || 100,
         calories: item.calories,
         protein: item.protein,
@@ -820,7 +892,7 @@
     toast('Wynik AI zapisany w dzienniku.');
   }
 
-  function entryNutritionFromForm(foodName, grams) {
+  function entryNutritionFromForm(foodName, amount, unit) {
     const hasManualValues = ['entry-calories', 'entry-protein', 'entry-carbs', 'entry-fat']
       .some((id) => $(id).value !== '');
     if (manualMode && hasManualValues) {
@@ -833,7 +905,7 @@
     }
 
     const food = findFoodByName(foodName);
-    if (food) return nutritionForFood(food, grams);
+    if (food) return nutritionForFood(food, amount, unit);
 
     return {
       calories: numberValue($('entry-calories').value, 0),
@@ -909,7 +981,7 @@
       <div class="food-row">
         <div>
           <strong title="${escapeHTML(food.name)}">${food.favorite ? '<i data-lucide="star"></i> ' : ''}${escapeHTML(food.name)}</strong>
-          <small>${round1(food.servingGram)}g serving</small>
+          <small>${formatFoodServing(food)}</small>
         </div>
         <span class="macro-number">${Math.round(food.calories)}</span>
         <span class="macro-number">${round1(food.protein)}b</span>
@@ -940,6 +1012,7 @@
       id,
       name: $('food-name').value.trim(),
       servingGram: numberValue($('food-serving').value, 100),
+      servingUnit: $('food-unit').value || 'g',
       calories: numberValue($('food-calories').value, 0),
       protein: numberValue($('food-protein').value, 0),
       carbs: numberValue($('food-carbs').value, 0),
@@ -971,6 +1044,7 @@
     $('food-id').value = '';
     $('food-form').reset();
     $('food-serving').value = '100';
+    $('food-unit').value = 'g';
     $('food-fiber').value = '0';
   }
 
@@ -984,7 +1058,8 @@
       const food = state.foods.find((item) => item.id === add.dataset.foodAdd);
       if (!food) return;
       $('entry-food').value = food.name;
-      $('entry-grams').value = String(food.servingGram || 100);
+      $('entry-grams').value = String(foodServingAmount(food));
+      $('entry-unit').value = foodServingUnit(food);
       switchView('diary');
       updateEntryPreview();
       $('entry-grams').focus();
@@ -996,7 +1071,8 @@
       if (!food) return;
       $('food-id').value = food.id;
       $('food-name').value = food.name;
-      $('food-serving').value = food.servingGram;
+      $('food-serving').value = foodServingAmount(food);
+      $('food-unit').value = foodServingUnit(food);
       $('food-calories').value = food.calories;
       $('food-protein').value = food.protein;
       $('food-carbs').value = food.carbs;
@@ -1259,6 +1335,8 @@
           meal: normalizeMeal(row.meal),
           foodId: null,
           foodName: foodName || 'Importowany produkt',
+          amount: row.grams || 100,
+          unit: 'g',
           grams: row.grams || 100,
           calories: row.calories || 0,
           protein: row.protein || 0,
@@ -1274,6 +1352,7 @@
           const importedFood = addImportedFoodIfMissing({
             name: entry.foodName,
             servingGram: entry.grams,
+            servingUnit: 'g',
             calories: entry.calories,
             protein: entry.protein,
             carbs: entry.carbs,
@@ -1320,13 +1399,15 @@
 
   function exportCSV() {
     const rows = [
-      ['data', 'posilek', 'produkt', 'gramy', 'kalorie', 'bialko', 'weglowodany', 'tluszcz'],
+      ['data', 'posilek', 'produkt', 'ilosc', 'jednostka', 'gramy', 'kalorie', 'bialko', 'weglowodany', 'tluszcz'],
       ...state.entries
         .sort((a, b) => a.date.localeCompare(b.date))
         .map((entry) => [
           entry.date,
           entry.meal,
           entry.foodName,
+          entry.amount ?? entry.grams,
+          entry.unit || 'g',
           entry.grams,
           entry.calories,
           entry.protein,
@@ -1364,6 +1445,8 @@
       value: totalsForDate(date).calories
     }));
     drawBarChart(canvas, points, state.settings.calories, {
+      label: 'Kalorie',
+      unit: 'kcal',
       color: '#2f7d59',
       targetColor: '#c75a3b',
       emptyLabel: 'Brak zapisanych kalorii'
@@ -1380,6 +1463,8 @@
       value: totalsForDate(date).calories
     }));
     drawBarChart(canvas, points, state.settings.calories, {
+      label: 'Kalorie',
+      unit: 'kcal',
       color: '#2f7d59',
       targetColor: '#c75a3b',
       emptyLabel: 'Brak zapisanych kalorii'
@@ -1404,6 +1489,8 @@
     }
 
     drawLineChart(canvas, points, {
+      label: 'Waga',
+      unit: 'kg',
       color: '#1f7a8c',
       emptyLabel: 'Brak pomiarów wagi'
     });
@@ -1429,13 +1516,18 @@
     if (!ctx) return;
     const { width, height } = canvas.__chartSize;
     clearChart(ctx, width, height);
+    canvas.__chartHitboxes = [];
     const values = points.map((point) => point.value);
     const maxValue = Math.max(target || 0, ...values, 1);
     const hasData = values.some((value) => value > 0);
-    const pad = { left: 42, right: 16, top: 18, bottom: 36 };
+    const pad = { left: 42, right: 16, top: 34, bottom: 36 };
     const chartW = width - pad.left - pad.right;
     const chartH = height - pad.top - pad.bottom;
 
+    drawChartLegend(ctx, width, [
+      { label: options.label || 'Wartość', color: options.color || '#2f7d59' },
+      ...(target ? [{ label: 'Cel', color: options.targetColor || '#c75a3b', dashed: true }] : [])
+    ]);
     drawGrid(ctx, pad, chartW, chartH, maxValue);
 
     if (target) {
@@ -1448,6 +1540,16 @@
       ctx.lineTo(pad.left + chartW, y);
       ctx.stroke();
       ctx.setLineDash([]);
+      canvas.__chartHitboxes.push({
+        type: 'rect',
+        x: pad.left,
+        y: y - 6,
+        width: chartW,
+        height: 12,
+        label: 'Cel',
+        value: `${Math.round(target)} ${options.unit || ''}`.trim(),
+        color: options.targetColor || '#c75a3b'
+      });
     }
 
     const gap = Math.max(4, Math.min(12, chartW / Math.max(points.length, 1) * 0.18));
@@ -1460,6 +1562,16 @@
       ctx.fillStyle = options.color || '#2f7d59';
       roundRect(ctx, x, y, barW, h, 4);
       ctx.fill();
+      canvas.__chartHitboxes.push({
+        type: 'rect',
+        x,
+        y,
+        width: barW,
+        height: Math.max(h, 3),
+        label: point.label,
+        value: `${Math.round(point.value)} ${options.unit || ''}`.trim(),
+        color: options.color || '#2f7d59'
+      });
 
       if (points.length <= 14 || index % Math.ceil(points.length / 8) === 0) {
         ctx.fillStyle = '#65706d';
@@ -1477,6 +1589,7 @@
     if (!ctx) return;
     const { width, height } = canvas.__chartSize;
     clearChart(ctx, width, height);
+    canvas.__chartHitboxes = [];
     if (!points.length) {
       drawEmptyLabel(ctx, width, height, options.emptyLabel || 'Brak danych');
       return;
@@ -1488,10 +1601,13 @@
     const spread = Math.max(1, maxValue - minValue);
     const low = minValue - spread * 0.12;
     const high = maxValue + spread * 0.12;
-    const pad = { left: 46, right: 18, top: 18, bottom: 36 };
+    const pad = { left: 46, right: 18, top: 34, bottom: 36 };
     const chartW = width - pad.left - pad.right;
     const chartH = height - pad.top - pad.bottom;
 
+    drawChartLegend(ctx, width, [
+      { label: options.label || 'Wartość', color: options.color || '#1f7a8c' }
+    ]);
     drawGrid(ctx, pad, chartW, chartH, high, low);
 
     if (points.length < 2) {
@@ -1523,6 +1639,15 @@
       ctx.arc(x, y, 4, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+      canvas.__chartHitboxes.push({
+        type: 'circle',
+        x,
+        y,
+        radius: 12,
+        label: point.label,
+        value: `${round1(point.value)} ${options.unit || ''}`.trim(),
+        color: options.color || '#1f7a8c'
+      });
 
       if (points.length <= 14 || index % Math.ceil(points.length / 8) === 0) {
         ctx.fillStyle = '#65706d';
@@ -1538,6 +1663,7 @@
     if (!ctx) return;
     const { width, height } = canvas.__chartSize;
     clearChart(ctx, width, height);
+    canvas.__chartHitboxes = [];
     const total = segments.reduce((sum, item) => sum + item.value, 0);
     if (total <= 0) {
       drawEmptyLabel(ctx, width, height, emptyLabel);
@@ -1551,11 +1677,24 @@
 
     segments.forEach((segment) => {
       const slice = (segment.value / total) * Math.PI * 2;
+      const lineWidth = Math.max(18, radius * 0.34);
       ctx.beginPath();
       ctx.strokeStyle = segment.color;
-      ctx.lineWidth = Math.max(18, radius * 0.34);
+      ctx.lineWidth = lineWidth;
       ctx.arc(centerX, centerY, radius, angle, angle + slice);
       ctx.stroke();
+      canvas.__chartHitboxes.push({
+        type: 'arc',
+        cx: centerX,
+        cy: centerY,
+        innerRadius: radius - lineWidth / 2,
+        outerRadius: radius + lineWidth / 2,
+        startAngle: angle,
+        endAngle: angle + slice,
+        label: segment.label,
+        value: `${Math.round(segment.value)} kcal (${Math.round((segment.value / total) * 100)}%)`,
+        color: segment.color
+      });
       angle += slice;
     });
 
@@ -1582,8 +1721,113 @@
     });
   }
 
+  function drawChartLegend(ctx, width, items) {
+    const visibleItems = items.filter(Boolean);
+    if (!visibleItems.length) return;
+
+    let x = width - 16;
+    const y = 15;
+    ctx.font = '12px system-ui';
+    ctx.textAlign = 'right';
+    [...visibleItems].reverse().forEach((item) => {
+      const labelWidth = ctx.measureText(item.label).width;
+      ctx.fillStyle = '#202625';
+      ctx.fillText(item.label, x, y);
+      const swatchX = x - labelWidth - 18;
+      ctx.strokeStyle = item.color;
+      ctx.fillStyle = item.color;
+      ctx.lineWidth = 2;
+      if (item.dashed) {
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(swatchX, y - 4);
+        ctx.lineTo(swatchX + 12, y - 4);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else {
+        roundRect(ctx, swatchX, y - 10, 12, 12, 3);
+        ctx.fill();
+      }
+      x = swatchX - 14;
+    });
+  }
+
+  function bindChartTooltip(canvas) {
+    if (canvas.__tooltipBound) return;
+    canvas.__tooltipBound = true;
+    canvas.addEventListener('mousemove', (event) => {
+      const hit = findChartHit(canvas, event);
+      if (!hit) {
+        hideChartTooltip();
+        return;
+      }
+      showChartTooltip(event, hit);
+    });
+    canvas.addEventListener('mouseleave', hideChartTooltip);
+  }
+
+  function findChartHit(canvas, event) {
+    const hitboxes = canvas.__chartHitboxes || [];
+    if (!hitboxes.length) return null;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    for (let index = hitboxes.length - 1; index >= 0; index -= 1) {
+      const hit = hitboxes[index];
+      if (hit.type === 'rect' && x >= hit.x && x <= hit.x + hit.width && y >= hit.y && y <= hit.y + hit.height) return hit;
+      if (hit.type === 'circle' && Math.hypot(x - hit.x, y - hit.y) <= hit.radius) return hit;
+      if (hit.type === 'arc' && isPointInArc(x, y, hit)) return hit;
+    }
+    return null;
+  }
+
+  function isPointInArc(x, y, hit) {
+    const dx = x - hit.cx;
+    const dy = y - hit.cy;
+    const radius = Math.hypot(dx, dy);
+    if (radius < hit.innerRadius || radius > hit.outerRadius) return false;
+
+    const angle = normalizeAngle(Math.atan2(dy, dx));
+    const start = normalizeAngle(hit.startAngle);
+    const end = normalizeAngle(hit.endAngle);
+    return start <= end ? angle >= start && angle <= end : angle >= start || angle <= end;
+  }
+
+  function normalizeAngle(angle) {
+    const full = Math.PI * 2;
+    return ((angle % full) + full) % full;
+  }
+
+  function showChartTooltip(event, hit) {
+    if (!chartTooltip) {
+      chartTooltip = document.createElement('div');
+      chartTooltip.className = 'chart-tooltip';
+      document.body.appendChild(chartTooltip);
+    }
+    chartTooltip.innerHTML = `
+      <strong>${escapeHTML(hit.label)}</strong>
+      <span>${escapeHTML(hit.value)}</span>
+    `;
+    chartTooltip.style.borderColor = hit.color || '#dfe5dc';
+    chartTooltip.hidden = false;
+
+    const offset = 14;
+    const rect = chartTooltip.getBoundingClientRect();
+    const left = Math.min(window.innerWidth - rect.width - 8, event.clientX + offset);
+    const top = Math.max(8, event.clientY - rect.height - offset);
+    chartTooltip.style.left = `${left}px`;
+    chartTooltip.style.top = `${top}px`;
+  }
+
+  function hideChartTooltip() {
+    if (chartTooltip) chartTooltip.hidden = true;
+  }
+
   function setupCanvas(canvas) {
     if (!canvas) return null;
+    bindChartTooltip(canvas);
     const rect = canvas.getBoundingClientRect();
     const parentWidth = canvas.parentElement ? canvas.parentElement.clientWidth : 0;
     const width = Math.max(280, Math.floor(rect.width || parentWidth || canvas.width));
@@ -1703,6 +1947,7 @@
       id: `seed-${normalize(name).replace(/[^a-z0-9]+/g, '-')}`,
       name,
       servingGram,
+      servingUnit: 'g',
       calories,
       protein,
       carbs,
@@ -1713,8 +1958,13 @@
     };
   }
 
-  function nutritionForFood(food, grams) {
-    const factor = numberValue(grams, 0) / Math.max(1, numberValue(food.servingGram, 100));
+  function nutritionForFood(food, amount, unit = 'g') {
+    const servingAmount = foodServingAmount(food);
+    const servingUnit = foodServingUnit(food);
+    const normalizedAmount = unit === servingUnit
+      ? numberValue(amount, 0)
+      : (unit === 'g' && servingUnit !== 'g' ? numberValue(amount, 0) : numberValue(amount, 0) * servingAmount);
+    const factor = normalizedAmount / Math.max(1, servingAmount);
     return {
       calories: numberValue(food.calories, 0) * factor,
       protein: numberValue(food.protein, 0) * factor,
@@ -1729,6 +1979,7 @@
       id: uid(),
       name: food.name,
       servingGram: numberValue(food.servingGram, 100) || 100,
+      servingUnit: food.servingUnit || 'g',
       calories: numberValue(food.calories, 0),
       protein: numberValue(food.protein, 0),
       carbs: numberValue(food.carbs, 0),
