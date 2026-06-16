@@ -52,6 +52,10 @@
           <p>Dane profili są prywatne i widoczne dopiero po zalogowaniu.</p>
           <form id="gate-auth-form" class="auth-form">
             <label class="wide">
+              <span>Nazwa użytkownika przy rejestracji</span>
+              <input id="gate-auth-username" type="text" autocomplete="nickname" placeholder="Np. Agnieszka">
+            </label>
+            <label class="wide">
               <span>Email</span>
               <input id="gate-auth-email" type="email" autocomplete="email" placeholder="email@domena.pl">
             </label>
@@ -82,6 +86,10 @@
         <button class="tab-button" type="button" data-view="foods">
           <i data-lucide="database"></i>
           <span>Produkty</span>
+        </button>
+        <button class="tab-button" type="button" data-view="recipes">
+          <i data-lucide="utensils"></i>
+          <span>Przepisy</span>
         </button>
         <button class="tab-button" type="button" data-view="trends">
           <i data-lucide="chart-line"></i>
@@ -124,6 +132,20 @@
               <div class="meter"><span id="fat-meter"></span></div>
               <small id="fat-detail">pozostało 0g</small>
             </article>
+          </section>
+
+          <section class="panel coach-panel" aria-label="Plan dnia">
+            <div class="coach-media">
+              <img src="assets/healthy-food-hero.jpg" alt="Zdrowy posiłek z kurczakiem, warzywami, owocami i wodą">
+            </div>
+            <div class="coach-copy">
+              <div class="panel-heading compact-heading">
+                <h2>Plan na dziś</h2>
+                <span id="daily-coach-stamp" class="stat-chip">Raz dziennie</span>
+              </div>
+              <p id="daily-coach-note"></p>
+              <ul id="daily-coach-suggestions" class="coach-list"></ul>
+            </div>
           </section>
 
           <section class="workspace-grid">
@@ -325,6 +347,68 @@
           </section>
         </section>
 
+        <section class="view" id="view-recipes">
+          <section class="recipes-hero">
+            <img src="assets/healthy-food-hero.jpg" alt="Kolorowa miska białkowa i zdrowe dodatki">
+            <div>
+              <span class="stat-chip">Inspiracje</span>
+              <h2>Przepisy pod redukcję</h2>
+              <p>Proste pomysły, które łatwo policzyć i przepisać do dziennika jako własny produkt albo posiłek.</p>
+            </div>
+          </section>
+
+          <section class="recipe-grid" aria-label="Lista przepisów">
+            <article class="recipe-card">
+              <div class="recipe-icon"><i data-lucide="salad"></i></div>
+              <div>
+                <h3>Miska białkowa z kurczakiem</h3>
+                <p>Kurczak, kasza lub ryż, dużo warzyw, sos jogurtowy i odrobina oliwy.</p>
+                <div class="recipe-meta">
+                  <span>520 kcal</span>
+                  <span>42 g białka</span>
+                  <span>20 min</span>
+                </div>
+              </div>
+            </article>
+            <article class="recipe-card">
+              <div class="recipe-icon"><i data-lucide="milk"></i></div>
+              <div>
+                <h3>Skyr z owocami i chrupiącym dodatkiem</h3>
+                <p>Skyr, jagody lub maliny, płatki owsiane, orzechy i cynamon.</p>
+                <div class="recipe-meta">
+                  <span>330 kcal</span>
+                  <span>28 g białka</span>
+                  <span>5 min</span>
+                </div>
+              </div>
+            </article>
+            <article class="recipe-card">
+              <div class="recipe-icon"><i data-lucide="fish"></i></div>
+              <div>
+                <h3>Łosoś z ziemniakami i sałatką</h3>
+                <p>Porcja ryby, gotowane ziemniaki, warzywa i lekki dressing cytrynowy.</p>
+                <div class="recipe-meta">
+                  <span>610 kcal</span>
+                  <span>36 g białka</span>
+                  <span>25 min</span>
+                </div>
+              </div>
+            </article>
+            <article class="recipe-card">
+              <div class="recipe-icon"><i data-lucide="soup"></i></div>
+              <div>
+                <h3>Zupa warzywna z soczewicą</h3>
+                <p>Duża objętość, dużo błonnika i wygodna porcja na dwa dni.</p>
+                <div class="recipe-meta">
+                  <span>420 kcal</span>
+                  <span>24 g białka</span>
+                  <span>35 min</span>
+                </div>
+              </div>
+            </article>
+          </section>
+        </section>
+
         <section class="view" id="view-trends">
           <section class="trend-grid">
             <div class="panel">
@@ -403,6 +487,10 @@
                 <span id="auth-state" class="stat-chip">Lokalnie</span>
               </div>
               <form id="auth-form" class="auth-form">
+                <label class="wide">
+                  <span>Nazwa użytkownika przy rejestracji</span>
+                  <input id="auth-username" type="text" autocomplete="nickname" placeholder="Np. Agnieszka">
+                </label>
                 <label class="wide">
                   <span>Email</span>
                   <input id="auth-email" type="email" autocomplete="email" placeholder="email@domena.pl">

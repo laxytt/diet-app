@@ -6,9 +6,8 @@
   const CURRENT_PROFILE_KEY = 'diet-studio:current-profile';
   const REMOTE_TABLE = 'diet_profiles';
   const ASSIGNMENTS_TABLE = 'profile_assignments';
+  const DEFAULT_PROFILE_ID = 'agnieszka';
   const PROFILES = [
-    { id: 'wiktor', name: 'Wiktor' },
-    { id: 'magda', name: 'Magda' },
     { id: 'agnieszka', name: 'Agnieszka' }
   ];
   const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
@@ -69,7 +68,8 @@
     foods: seedFoods,
     entries: [],
     weights: [],
-    water: []
+    water: [],
+    dailyCoach: {}
   };
 
   let currentProfileId = loadCurrentProfileId();
@@ -185,6 +185,7 @@
     $('selected-date').value = currentDate;
     renderProfileBadge();
     renderSummary();
+    renderDailyCoach();
     renderDatalist();
     renderDiary();
     renderBodyInputs();
@@ -315,6 +316,7 @@
     const syncStatus = $('sync-status');
     const authState = $('auth-state');
     const syncNote = $('sync-note');
+    const todaySummary = $('today-summary');
     if (!syncStatus || !authState || !syncNote) return;
     const appShell = document.querySelector('.app-shell');
     const authGate = $('auth-gate');
@@ -326,6 +328,7 @@
     if (appShell) appShell.classList.toggle('locked', locked);
     if (appShell) appShell.classList.toggle('auth-mode', locked);
     if (authGate) authGate.hidden = !locked;
+    if (locked && todaySummary) todaySummary.textContent = 'Zaloguj się, żeby zobaczyć dane profilu';
 
     if (!supabaseClient) {
       syncStatus.textContent = 'Lokalnie';
@@ -346,7 +349,7 @@
       authState.textContent = syncSession.user.email || 'Zalogowano';
       syncStatus.classList.add('error');
       authState.classList.add('error');
-      syncNote.textContent = 'Ten email nie ma przypisanego profilu. Dodaj wpis w tabeli profile_assignments.';
+      syncNote.textContent = 'Nie udało się przygotować profilu dla tego emaila. Spróbuj wylogować się i zalogować ponownie.';
       return;
     }
 
@@ -392,56 +395,80 @@
     toast('Zalogowano i włączono synchronizację.');
   }
 
-  async function signUpUser() {
+  async function signUpUser(event) {
+    if (event) event.preventDefault();
     if (!supabaseClient) {
       toast('Najpierw skonfiguruj Supabase w config.js.');
       return;
     }
 
-    const source = document.activeElement && document.activeElement.id === 'gate-signup-button' ? 'gate' : 'settings';
+    const source = event && event.currentTarget && event.currentTarget.id === 'gate-signup-button' ? 'gate' : 'settings';
     const credentials = readAuthCredentials(source);
     const email = credentials.email;
     const password = credentials.password;
-    if (!email || !password) {
-      toast('Podaj email i hasło.');
+    const username = sanitizeProfileName(credentials.username, email);
+    if (!email || !password || !username) {
+      toast('Podaj email, hasło i nazwę użytkownika.');
       return;
     }
 
-    const { data, error } = await supabaseClient.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: authRedirectUrl()
-      }
-    });
+    setAuthBusy(source, true, 'Tworzę...', 'signup');
+    const { data, error } = await withTimeout(
+      supabaseClient.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { username },
+          emailRedirectTo: authRedirectUrl()
+        }
+      }),
+      12000,
+      'Rejestracja trwa za długo. Spróbuj ponownie.'
+    ).catch((timeoutError) => ({ data: null, error: timeoutError }));
     if (error) {
       toast(`Nie udało się utworzyć konta: ${error.message}`);
+      setAuthBusy(source, false);
       return;
     }
     syncSession = data.session;
-    if (data.session) await loadAssignedProfile();
+    if (data.session) {
+      try {
+        await ensureProfileAssignment(username);
+        await loadAssignedProfile();
+      } catch (profileError) {
+        toast(`Profil: ${profileError.message}`);
+      }
+    }
+    setAuthBusy(source, false);
     updateSyncUI();
     toast(data.session ? 'Konto utworzone i zalogowane.' : 'Konto utworzone. Sprawdź email, jeśli Supabase wymaga potwierdzenia.');
   }
 
   function readAuthCredentials(source) {
     const prefix = source === 'gate' ? 'gate-' : '';
+    const usernameInput = $(`${prefix}auth-username`);
     return {
       email: $(`${prefix}auth-email`).value.trim(),
-      password: $(`${prefix}auth-password`).value
+      password: $(`${prefix}auth-password`).value,
+      username: usernameInput ? usernameInput.value.trim() : ''
     };
   }
 
-  function setAuthBusy(source, busy, label = 'Loguję...') {
+  function setAuthBusy(source, busy, label = 'Loguję...', action = 'login') {
     const loginButton = source === 'gate' ? $('gate-login-button') : $('login-button');
     const signupButton = source === 'gate' ? $('gate-signup-button') : $('signup-button');
     if (loginButton) {
       loginButton.disabled = busy;
-      loginButton.innerHTML = busy
+      loginButton.innerHTML = busy && action === 'login'
         ? `<i data-lucide="loader-circle"></i> ${label}`
         : '<i data-lucide="log-in"></i> Zaloguj';
     }
-    if (signupButton) signupButton.disabled = busy;
+    if (signupButton) {
+      signupButton.disabled = busy;
+      signupButton.innerHTML = busy && action === 'signup'
+        ? `<i data-lucide="loader-circle"></i> ${label}`
+        : '<i data-lucide="user-plus"></i> Utwórz konto';
+    }
     refreshIcons();
   }
 
@@ -450,6 +477,53 @@
     url.hash = '';
     url.search = '';
     return url.toString();
+  }
+
+  function sanitizeProfileName(value, email = '') {
+    const explicit = String(value || '').trim().replace(/\s+/g, ' ');
+    if (explicit) return explicit.slice(0, 60);
+    const localPart = String(email || '').split('@')[0].replace(/[._-]+/g, ' ').trim();
+    if (!localPart) return profileById(DEFAULT_PROFILE_ID).name;
+    return localPart
+      .split(' ')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+      .slice(0, 60);
+  }
+
+  function profileNameFromSession(fallbackName = '') {
+    const user = syncSession && syncSession.user;
+    const metadata = (user && user.user_metadata) || {};
+    return sanitizeProfileName(
+      fallbackName || metadata.username || metadata.name || metadata.full_name || '',
+      user && user.email
+    );
+  }
+
+  async function ensureProfileAssignment(preferredName = '') {
+    if (!canSync()) return null;
+    const email = syncSession.user.email;
+    if (!email) throw new Error('Sesja Supabase nie zawiera emaila.');
+
+    const name = profileNameFromSession(preferredName);
+    const { data, error } = await withTimeout(
+      supabaseClient
+        .from(ASSIGNMENTS_TABLE)
+        .upsert({
+          email: email.toLowerCase(),
+          profile_id: DEFAULT_PROFILE_ID,
+          name,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'email' })
+        .select('profile_id, name')
+        .single(),
+      12000,
+      'Nie udało się utworzyć profilu dla tego emaila.'
+    );
+
+    if (error) throw error;
+    return data || { profile_id: DEFAULT_PROFILE_ID, name };
   }
 
   async function logoutUser() {
@@ -490,12 +564,16 @@
       );
 
       if (error) throw error;
-      if (!data || !isKnownProfileId(data.profile_id)) {
-        throw new Error('Ten email nie ma przypisanego profilu.');
+      let assignment = data;
+      if (!assignment || !isKnownProfileId(assignment.profile_id)) {
+        assignment = await ensureProfileAssignment(assignment && assignment.name);
+      }
+      if (!assignment || !isKnownProfileId(assignment.profile_id)) {
+        throw new Error('Ten email nie ma poprawnego profilu.');
       }
 
-      currentProfileAssignment = data;
-      currentProfileId = data.profile_id;
+      currentProfileAssignment = assignment;
+      currentProfileId = assignment.profile_id;
       localStorage.setItem(CURRENT_PROFILE_KEY, currentProfileId);
       state = loadState(currentProfileId);
       aiDraft = null;
@@ -571,7 +649,7 @@
       .upsert({
         user_id: syncSession.user.id,
         profile_id: profile.id,
-        name: profile.name,
+        name: profileName(profile.id),
         data: snapshot,
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id,profile_id' });
@@ -590,6 +668,93 @@
     updateMetric('protein', totals.protein, targets.protein, 'g');
     updateMetric('carbs', totals.carbs, targets.carbs, 'g');
     updateMetric('fat', totals.fat, targets.fat, 'g');
+  }
+
+  function renderDailyCoach() {
+    const note = $('daily-coach-note');
+    const list = $('daily-coach-suggestions');
+    const stamp = $('daily-coach-stamp');
+    if (!note || !list || !stamp) return;
+
+    const coach = getDailyCoach(currentDate);
+    note.textContent = coach.note;
+    list.innerHTML = coach.suggestions.map((item) => `<li>${escapeHTML(item)}</li>`).join('');
+    stamp.textContent = 'Raz dziennie';
+  }
+
+  function getDailyCoach(date) {
+    if (!state.dailyCoach || typeof state.dailyCoach !== 'object' || Array.isArray(state.dailyCoach)) {
+      state.dailyCoach = {};
+    }
+
+    if (state.dailyCoach[date]) return state.dailyCoach[date];
+
+    const coach = buildDailyCoach(date);
+    state.dailyCoach[date] = coach;
+    saveState();
+    return coach;
+  }
+
+  function buildDailyCoach(date) {
+    const totals = totalsForDate(date);
+    const targets = state.settings;
+    const water = state.water.find((item) => item.date === date);
+    const seed = seededIndex(`${date}:${currentProfileId}`, 1000);
+    const name = profileName();
+    const notes = [
+      `${name}, dziś wygrywa prostota: białko, warzywa i jeden spokojny wybór naraz.`,
+      `${name}, nie musisz mieć idealnego dnia. Wystarczy dzień, który da się powtórzyć jutro.`,
+      `${name}, trzymaj się planu posiłek po posiłku. Małe decyzje robią dużą różnicę.`,
+      `${name}, najpierw sytość i nawodnienie, potem reszta robi się łatwiejsza.`,
+      `${name}, cel to nie kara. To mapa, która ma pomagać wybierać spokojniej.`
+    ];
+
+    const suggestions = [];
+    const caloriesLeft = targets.calories - totals.calories;
+    if (totals.calories <= 0) {
+      suggestions.push('Zaplanuj pierwszy posiłek wokół 25-35 g białka, żeby łatwiej kontrolować głód.');
+    } else if (caloriesLeft < -150) {
+      suggestions.push('Jesteś ponad celem. Postaw dalej na wodę, spacer i lekką kolację bez dokładek.');
+    } else if (caloriesLeft < 250) {
+      suggestions.push('Zostało mało kalorii. Wybierz coś objętościowego: warzywa, chudy nabiał albo zupę.');
+    } else {
+      suggestions.push(`Masz jeszcze około ${Math.max(0, Math.round(caloriesLeft))} kcal. Zaplanuj je świadomie, zanim pojawi się głód.`);
+    }
+
+    if (targets.protein > 0 && totals.protein < targets.protein * 0.7) {
+      suggestions.push('Dodaj porcję białka: skyr, jajka, kurczak, tuńczyk, tofu albo serek wiejski.');
+    } else {
+      suggestions.push('Utrzymaj talerz w rytmie: połowa warzyw, ćwiartka białka, ćwiartka węglowodanów.');
+    }
+
+    if (!water || numberValue(water.ml, 0) < targets.water * 0.7) {
+      suggestions.push('Wypij szklankę wody teraz i następną do kolejnego posiłku.');
+    } else {
+      suggestions.push('Masz dobry rytm nawodnienia. Dopilnuj jeszcze warzyw lub owocu w kolejnym posiłku.');
+    }
+
+    const rotating = [
+      'Przygotuj jedną gotową przekąskę ratunkową: owoc + skyr albo warzywa + hummus.',
+      'Jeśli masz ochotę na słodkie, zjedz porcję po normalnym posiłku, nie zamiast niego.',
+      'Zrób 10 minut spaceru po największym posiłku. To prosty bonus dla apetytu i glukozy.',
+      'Nie tnij kalorii agresywnie. Lepszy jest deficyt, który da się utrzymać przez tygodnie.'
+    ];
+    suggestions.push(rotating[seed % rotating.length]);
+
+    return {
+      date,
+      note: notes[seed % notes.length],
+      suggestions: suggestions.slice(0, 3),
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  function seededIndex(value, modulo) {
+    let hash = 0;
+    for (let index = 0; index < value.length; index += 1) {
+      hash = (hash * 31 + value.charCodeAt(index)) % 2147483647;
+    }
+    return modulo ? hash % modulo : hash;
   }
 
   function updateMetric(key, value, target, unit) {
@@ -1945,10 +2110,14 @@
   }
 
   function migrateLegacyState() {
+    const targetKey = storageKey(DEFAULT_PROFILE_ID);
     const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
-    const targetKey = storageKey('wiktor');
-    if (!legacy || localStorage.getItem(targetKey)) return;
-    localStorage.setItem(targetKey, legacy);
+
+    if (!localStorage.getItem(targetKey) && legacy) {
+      localStorage.setItem(targetKey, legacy);
+    }
+
+    localStorage.setItem(CURRENT_PROFILE_KEY, DEFAULT_PROFILE_ID);
   }
 
   function normalizeState(rawState) {
@@ -1959,7 +2128,10 @@
       foods: Array.isArray(rawState && rawState.foods) && rawState.foods.length ? rawState.foods : structuredCloneSafe(seedFoods),
       entries: Array.isArray(rawState && rawState.entries) ? rawState.entries : [],
       weights: Array.isArray(rawState && rawState.weights) ? rawState.weights : [],
-      water: Array.isArray(rawState && rawState.water) ? rawState.water : []
+      water: Array.isArray(rawState && rawState.water) ? rawState.water : [],
+      dailyCoach: rawState && rawState.dailyCoach && typeof rawState.dailyCoach === 'object' && !Array.isArray(rawState.dailyCoach)
+        ? rawState.dailyCoach
+        : {}
     };
   }
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'diet-studio-v7';
+const CACHE_NAME = 'diet-studio-v8';
 const ASSETS = [
   './',
   './index.html',
@@ -6,7 +6,8 @@ const ASSETS = [
   './app.js',
   './config.js',
   './manifest.webmanifest',
-  './icon.svg'
+  './icon.svg',
+  './assets/healthy-food-hero.jpg'
 ];
 
 self.addEventListener('install', (event) => {
