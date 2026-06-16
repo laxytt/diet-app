@@ -82,6 +82,7 @@
   let chartTimer = 0;
   let chartTooltip = null;
   let remoteSaveTimer = 0;
+  let profileLoadPromise = null;
   let supabaseClient = null;
   let syncSession = null;
   let currentProfileAssignment = null;
@@ -237,6 +238,10 @@
     return PROFILES.find((profile) => profile.id === profileId) || PROFILES[0];
   }
 
+  function isKnownProfileId(profileId) {
+    return PROFILES.some((profile) => profile.id === profileId);
+  }
+
   function profileName(profileId = currentProfileId) {
     if (currentProfileAssignment && currentProfileAssignment.profile_id === profileId) {
       return currentProfileAssignment.name || profileById(profileId).name;
@@ -252,6 +257,14 @@
     const visible = Boolean(syncSession && currentProfileAssignment);
     badge.hidden = !visible;
     if (visible) nameNode.textContent = profileName();
+  }
+
+  function withTimeout(promise, milliseconds, message) {
+    let timeoutId = 0;
+    const timeout = new Promise((_, reject) => {
+      timeoutId = window.setTimeout(() => reject(new Error(message)), milliseconds);
+    });
+    return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
   }
 
   function loadCurrentProfileId() {
@@ -273,10 +286,10 @@
     });
     supabaseClient.auth.onAuthStateChange(async (_event, session) => {
       syncSession = session;
-      if (canSync()) {
+      if (canSync() && !currentProfileAssignment) {
         await loadAssignedProfile();
       } else {
-        currentProfileAssignment = null;
+        if (!canSync()) currentProfileAssignment = null;
         updateSyncUI();
         renderProfileBadge();
       }
@@ -311,6 +324,7 @@
     authState.classList.remove('online', 'error');
     const locked = Boolean(supabaseClient && (!syncSession || !currentProfileAssignment));
     if (appShell) appShell.classList.toggle('locked', locked);
+    if (appShell) appShell.classList.toggle('auth-mode', locked);
     if (authGate) authGate.hidden = !locked;
 
     if (!supabaseClient) {
@@ -350,7 +364,8 @@
       return;
     }
 
-    const credentials = readAuthCredentials(event.target && event.target.id === 'gate-auth-form' ? 'gate' : 'settings');
+    const source = event.target && event.target.id === 'gate-auth-form' ? 'gate' : 'settings';
+    const credentials = readAuthCredentials(source);
     const email = credentials.email;
     const password = credentials.password;
     if (!email || !password) {
@@ -358,14 +373,22 @@
       return;
     }
 
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    setAuthBusy(source, true);
+    const { data, error } = await withTimeout(
+      supabaseClient.auth.signInWithPassword({ email, password }),
+      12000,
+      'Logowanie trwa za długo. Spróbuj ponownie.'
+    ).catch((timeoutError) => ({ data: null, error: timeoutError }));
     if (error) {
       toast(`Logowanie nieudane: ${error.message}`);
+      setAuthBusy(source, false);
       return;
     }
     syncSession = data.session;
     updateSyncUI();
     await loadAssignedProfile();
+    setAuthBusy(source, false);
+    if (!currentProfileAssignment) return;
     toast('Zalogowano i włączono synchronizację.');
   }
 
@@ -409,6 +432,19 @@
     };
   }
 
+  function setAuthBusy(source, busy, label = 'Loguję...') {
+    const loginButton = source === 'gate' ? $('gate-login-button') : $('login-button');
+    const signupButton = source === 'gate' ? $('gate-signup-button') : $('signup-button');
+    if (loginButton) {
+      loginButton.disabled = busy;
+      loginButton.innerHTML = busy
+        ? `<i data-lucide="loader-circle"></i> ${label}`
+        : '<i data-lucide="log-in"></i> Zaloguj';
+    }
+    if (signupButton) signupButton.disabled = busy;
+    refreshIcons();
+  }
+
   function authRedirectUrl() {
     const url = new URL(window.location.href);
     url.hash = '';
@@ -431,39 +467,52 @@
 
   async function loadAssignedProfile() {
     if (!canSync()) return;
+    if (profileLoadPromise) return profileLoadPromise;
 
+    profileLoadPromise = loadAssignedProfileInternal().finally(() => {
+      profileLoadPromise = null;
+    });
+    return profileLoadPromise;
+  }
+
+  async function loadAssignedProfileInternal() {
     isRemoteLoading = true;
     updateSyncUI();
 
-    const { data, error } = await supabaseClient
-      .from(ASSIGNMENTS_TABLE)
-      .select('profile_id, name')
-      .maybeSingle();
+    try {
+      const { data, error } = await withTimeout(
+        supabaseClient
+          .from(ASSIGNMENTS_TABLE)
+          .select('profile_id, name')
+          .maybeSingle(),
+        12000,
+        'Nie udało się pobrać przypisanego profilu. Sprawdź połączenie i spróbuj ponownie.'
+      );
 
-    if (error) {
+      if (error) throw error;
+      if (!data || !isKnownProfileId(data.profile_id)) {
+        throw new Error('Ten email nie ma przypisanego profilu.');
+      }
+
+      currentProfileAssignment = data;
+      currentProfileId = data.profile_id;
+      localStorage.setItem(CURRENT_PROFILE_KEY, currentProfileId);
+      state = loadState(currentProfileId);
+      aiDraft = null;
+      clearImport();
+      updateSyncUI();
+
+      await loadRemoteProfile(currentProfileId).catch((error) => {
+        toast(`Synchronizacja: ${error.message}`);
+        render();
+      });
+    } catch (error) {
       currentProfileAssignment = null;
+      toast(`Profil: ${error.message}`);
+    } finally {
       isRemoteLoading = false;
       updateSyncUI();
-      toast(`Blad profilu: ${error.message}`);
-      return;
     }
-
-    if (!data || !profileById(data.profile_id)) {
-      currentProfileAssignment = null;
-      isRemoteLoading = false;
-      updateSyncUI();
-      toast('Nie znaleziono przypisanego profilu dla tego emaila.');
-      return;
-    }
-
-    currentProfileAssignment = data;
-    currentProfileId = data.profile_id;
-    localStorage.setItem(CURRENT_PROFILE_KEY, currentProfileId);
-    state = loadState(currentProfileId);
-    aiDraft = null;
-    clearImport();
-
-    await loadRemoteProfile(currentProfileId);
   }
 
   async function loadRemoteProfile(profileId) {
@@ -473,12 +522,16 @@
     isRemoteLoading = true;
     updateSyncUI();
     const profile = profileById(profileId);
-    const { data, error } = await supabaseClient
-      .from(REMOTE_TABLE)
-      .select('data, updated_at')
-      .eq('user_id', syncSession.user.id)
-      .eq('profile_id', profile.id)
-      .maybeSingle();
+    const { data, error } = await withTimeout(
+      supabaseClient
+        .from(REMOTE_TABLE)
+        .select('data, updated_at')
+        .eq('user_id', syncSession.user.id)
+        .eq('profile_id', profile.id)
+        .maybeSingle(),
+      12000,
+      'Nie udało się pobrać danych profilu.'
+    );
 
     isRemoteLoading = false;
     if (error) {
