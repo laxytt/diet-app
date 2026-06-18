@@ -311,6 +311,19 @@ select:focus {
   border-radius: 12px;
 }
 
+.topbar-logout {
+  min-height: 42px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--muted);
+}
+
+.topbar-logout:hover {
+  color: var(--danger);
+  border-color: rgba(185, 71, 63, 0.22);
+  background: #fff7f7;
+}
+
 .icon-button:hover,
 .ghost-button:hover,
 .secondary-button:hover {
@@ -2118,6 +2131,10 @@ th {
 
   .date-switcher #today-button {
     display: none;
+  }
+
+  .topbar-logout {
+    width: 100%;
   }
 
   .profile-badge {

@@ -142,7 +142,7 @@
   let remoteReady = false;
   let lastRemoteRevision = loadRemoteRevision(currentProfileId);
   let isAuthInitializing = true;
-  const signupModes = { gate: false, settings: false };
+  const signupModes = { gate: false };
   let sessionRefreshPromise = null;
 
   const $ = (id) => document.getElementById(id);
@@ -237,9 +237,6 @@
       renderTrendSummary();
     });
     $('settings-form').addEventListener('submit', saveSettings);
-    $('auth-form').addEventListener('submit', loginUser);
-    $('signup-button').addEventListener('click', signUpUser);
-    $('google-button').addEventListener('click', loginWithGoogle);
     $('logout-button').addEventListener('click', logoutUser);
     $('avatar-input').addEventListener('change', handleAvatarUpload);
     $('remove-avatar').addEventListener('click', removeAvatar);
@@ -440,16 +437,15 @@
 
   function updateSyncUI() {
     const syncStatus = $('sync-status');
-    const authState = $('auth-state');
-    const syncNote = $('sync-note');
+    const logoutButton = $('logout-button');
     const todaySummary = $('today-summary');
-    if (!syncStatus || !authState || !syncNote) return;
+    if (!syncStatus) return;
     const appShell = document.querySelector('.app-shell');
     const authGate = $('auth-gate');
     renderProfileBadge();
 
     syncStatus.classList.remove('online', 'error');
-    authState.classList.remove('online', 'error');
+    if (logoutButton) logoutButton.hidden = !syncSession;
     const locked = Boolean(supabaseClient && (isAuthInitializing || !syncSession || !currentProfileAssignment));
     if (appShell) appShell.classList.toggle('locked', locked);
     if (appShell) appShell.classList.toggle('auth-mode', locked);
@@ -460,39 +456,27 @@
 
     if (!supabaseClient) {
       syncStatus.textContent = 'Lokalnie';
-      authState.textContent = 'Brak konfiguracji';
-      syncNote.textContent = 'Dodaj dane Supabase w config.js, żeby synchronizować dane między urządzeniami.';
       return;
     }
 
     if (isAuthInitializing) {
       syncStatus.textContent = 'Sprawdzam sesję';
-      authState.textContent = 'Ładowanie';
-      syncNote.textContent = 'Sprawdzam zapisane logowanie. To powinno potrwać chwilę.';
       return;
     }
 
     if (!syncSession) {
       syncStatus.textContent = 'Lokalnie';
-      authState.textContent = 'Niezalogowano';
-      syncNote.textContent = 'Zaloguj się do rodzinnego konta, żeby zapisywać dane w chmurze.';
       return;
     }
 
     if (!currentProfileAssignment) {
       syncStatus.textContent = isRemoteLoading ? 'Synchronizacja' : 'Brak profilu';
-      authState.textContent = syncSession.user.email || 'Zalogowano';
       syncStatus.classList.add('error');
-      authState.classList.add('error');
-      syncNote.textContent = 'Ten email nie ma przypisanego profilu diety. Dane Agnieszki są dostępne tylko dla przypisanego konta.';
       return;
     }
 
     syncStatus.textContent = isRemoteLoading ? 'Synchronizacja' : 'Online';
-    authState.textContent = syncSession.user.email || 'Zalogowano';
     syncStatus.classList.add('online');
-    authState.classList.add('online');
-    syncNote.textContent = `Synchronizacja aktywna dla profilu ${profileName()}.`;
   }
 
   async function loginUser(event) {
@@ -502,7 +486,7 @@
       return;
     }
 
-    const source = event.target && event.target.id === 'gate-auth-form' ? 'gate' : 'settings';
+    const source = 'gate';
     const credentials = readAuthCredentials(source);
     const email = credentials.email;
     const password = credentials.password;
@@ -560,7 +544,7 @@
       return;
     }
 
-    const source = event && event.currentTarget && event.currentTarget.id === 'gate-signup-button' ? 'gate' : 'settings';
+    const source = 'gate';
     if (!signupModes[source]) {
       setSignupMode(source, true);
       toast('Uzupełnij nazwę użytkownika, email i hasło, żeby utworzyć konto.');
@@ -610,10 +594,10 @@
 
   function setSignupMode(source, enabled) {
     signupModes[source] = enabled;
-    const prefix = source === 'gate' ? 'gate-' : '';
+    const prefix = 'gate-';
     const usernameInput = $(`${prefix}auth-username`);
     const usernameField = usernameInput ? usernameInput.closest('.signup-field') : null;
-    const signupButton = source === 'gate' ? $('gate-signup-button') : $('signup-button');
+    const signupButton = $('gate-signup-button');
     const passwordInput = $(`${prefix}auth-password`);
     if (usernameField) usernameField.hidden = !enabled;
     if (usernameInput) {
@@ -631,7 +615,7 @@
   }
 
   function readAuthCredentials(source) {
-    const prefix = source === 'gate' ? 'gate-' : '';
+    const prefix = 'gate-';
     const usernameInput = $(`${prefix}auth-username`);
     return {
       email: $(`${prefix}auth-email`).value.trim(),
@@ -641,8 +625,8 @@
   }
 
   function setAuthBusy(source, busy, label = 'Loguję...', action = 'login') {
-    const loginButton = source === 'gate' ? $('gate-login-button') : $('login-button');
-    const signupButton = source === 'gate' ? $('gate-signup-button') : $('signup-button');
+    const loginButton = $('gate-login-button');
+    const signupButton = $('gate-signup-button');
     if (loginButton) {
       loginButton.disabled = busy;
       loginButton.innerHTML = busy && action === 'login'
@@ -689,7 +673,6 @@
     currentProfileAssignment = null;
     remoteReady = false;
     setSignupMode('gate', false);
-    setSignupMode('settings', false);
     updateSyncUI();
     toast('Wylogowano. Dane lokalne nadal są na tym urządzeniu.');
   }
