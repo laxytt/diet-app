@@ -62,11 +62,17 @@
           </div>
         </div>
         <div class="panel auth-gate-panel">
-          <div class="panel-heading">
-            <h2>Zaloguj się</h2>
+          <div class="auth-panel-header">
+            <div class="auth-panel-mark" aria-hidden="true">
+              <i data-lucide="leaf"></i>
+            </div>
+            <div>
+              <h2>Zaloguj się</h2>
+              <p>Synchronizuj profil Agnieszki na każdym urządzeniu.</p>
+            </div>
             <span class="stat-chip">Sync</span>
           </div>
-          <p>Dane profili są prywatne i widoczne dopiero po zalogowaniu.</p>
+          <p class="auth-hint">Dane profilu są prywatne i pojawią się dopiero po zalogowaniu.</p>
           <form id="gate-auth-form" class="auth-form">
             <label class="wide signup-field" hidden>
               <span>Nazwa użytkownika</span>
@@ -90,7 +96,7 @@
                 Utwórz konto
               </button>
               <button class="secondary-button google-button" id="gate-google-button" type="button">
-                <i data-lucide="chrome"></i>
+                <span class="google-mark" aria-hidden="true">G</span>
                 Zaloguj przez Google
               </button>
             </div>
@@ -745,7 +751,7 @@
                     Utwórz konto
                   </button>
                   <button class="secondary-button google-button" id="google-button" type="button">
-                    <i data-lucide="chrome"></i>
+                    <span class="google-mark" aria-hidden="true">G</span>
                     Zaloguj przez Google
                   </button>
                   <button class="ghost-button" id="logout-button" type="button">
