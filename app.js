@@ -4,6 +4,7 @@
   const LEGACY_STORAGE_KEY = 'diet-studio:v1';
   const STORAGE_PREFIX = 'diet-studio:v2';
   const CURRENT_PROFILE_KEY = 'diet-studio:current-profile';
+  const REMOTE_REVISION_PREFIX = 'diet-studio:remote-revision';
   const REMOTE_TABLE = 'diet_profiles';
   const ASSIGNMENTS_TABLE = 'profile_assignments';
   const DEFAULT_PROFILE_ID = 'agnieszka';
@@ -69,7 +70,8 @@
     entries: [],
     weights: [],
     water: [],
-    dailyCoach: {}
+    dailyCoach: {},
+    deletedEntryIds: []
   };
 
   let currentProfileId = loadCurrentProfileId();
@@ -82,11 +84,15 @@
   let chartTimer = 0;
   let chartTooltip = null;
   let remoteSaveTimer = 0;
+  let remoteSaveInFlight = null;
+  let pendingRemoteSave = false;
   let profileLoadPromise = null;
   let supabaseClient = null;
   let syncSession = null;
   let currentProfileAssignment = null;
   let isRemoteLoading = false;
+  let remoteReady = false;
+  let lastRemoteRevision = loadRemoteRevision(currentProfileId);
 
   const $ = (id) => document.getElementById(id);
 
@@ -148,6 +154,7 @@
     $('meal-groups').addEventListener('click', (event) => {
       const deleteButton = event.target.closest('[data-delete-entry]');
       if (!deleteButton) return;
+      markEntryDeleted(deleteButton.dataset.deleteEntry);
       state.entries = state.entries.filter((entry) => entry.id !== deleteButton.dataset.deleteEntry);
       saveState();
       render();
@@ -349,7 +356,7 @@
       authState.textContent = syncSession.user.email || 'Zalogowano';
       syncStatus.classList.add('error');
       authState.classList.add('error');
-      syncNote.textContent = 'Nie udało się przygotować profilu dla tego emaila. Spróbuj wylogować się i zalogować ponownie.';
+      syncNote.textContent = 'Ten email nie ma przypisanego profilu diety. Dane Agnieszki są dostępne tylko dla przypisanego konta.';
       return;
     }
 
@@ -432,15 +439,14 @@
     }
     syncSession = data.session;
     if (data.session) {
-      try {
-        await ensureProfileAssignment(username);
-        await loadAssignedProfile();
-      } catch (profileError) {
-        toast(`Profil: ${profileError.message}`);
-      }
+      await loadAssignedProfile();
     }
     setAuthBusy(source, false);
     updateSyncUI();
+    if (data.session && !currentProfileAssignment) {
+      toast('Konto utworzone, ale ten email nie ma przypisanego profilu diety.');
+      return;
+    }
     toast(data.session ? 'Konto utworzone i zalogowane.' : 'Konto utworzone. Sprawdź email, jeśli Supabase wymaga potwierdzenia.');
   }
 
@@ -492,40 +498,6 @@
       .slice(0, 60);
   }
 
-  function profileNameFromSession(fallbackName = '') {
-    const user = syncSession && syncSession.user;
-    const metadata = (user && user.user_metadata) || {};
-    return sanitizeProfileName(
-      fallbackName || metadata.username || metadata.name || metadata.full_name || '',
-      user && user.email
-    );
-  }
-
-  async function ensureProfileAssignment(preferredName = '') {
-    if (!canSync()) return null;
-    const email = syncSession.user.email;
-    if (!email) throw new Error('Sesja Supabase nie zawiera emaila.');
-
-    const name = profileNameFromSession(preferredName);
-    const { data, error } = await withTimeout(
-      supabaseClient
-        .from(ASSIGNMENTS_TABLE)
-        .upsert({
-          email: email.toLowerCase(),
-          profile_id: DEFAULT_PROFILE_ID,
-          name,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'email' })
-        .select('profile_id, name')
-        .single(),
-      12000,
-      'Nie udało się utworzyć profilu dla tego emaila.'
-    );
-
-    if (error) throw error;
-    return data || { profile_id: DEFAULT_PROFILE_ID, name };
-  }
-
   async function logoutUser() {
     if (!supabaseClient) return;
     const { error } = await supabaseClient.auth.signOut();
@@ -535,6 +507,7 @@
     }
     syncSession = null;
     currentProfileAssignment = null;
+    remoteReady = false;
     updateSyncUI();
     toast('Wylogowano. Dane lokalne nadal są na tym urządzeniu.');
   }
@@ -551,6 +524,7 @@
 
   async function loadAssignedProfileInternal() {
     isRemoteLoading = true;
+    remoteReady = false;
     updateSyncUI();
 
     try {
@@ -564,17 +538,15 @@
       );
 
       if (error) throw error;
-      let assignment = data;
+      const assignment = data;
       if (!assignment || !isKnownProfileId(assignment.profile_id)) {
-        assignment = await ensureProfileAssignment(assignment && assignment.name);
-      }
-      if (!assignment || !isKnownProfileId(assignment.profile_id)) {
-        throw new Error('Ten email nie ma poprawnego profilu.');
+        throw new Error('Ten email nie ma przypisanego profilu. Poproś właściciela aplikacji o dostęp.');
       }
 
       currentProfileAssignment = assignment;
       currentProfileId = assignment.profile_id;
       localStorage.setItem(CURRENT_PROFILE_KEY, currentProfileId);
+      lastRemoteRevision = loadRemoteRevision(currentProfileId);
       state = loadState(currentProfileId);
       aiDraft = null;
       clearImport();
@@ -598,12 +570,13 @@
     if (!currentProfileAssignment || currentProfileAssignment.profile_id !== profileId) return;
 
     isRemoteLoading = true;
+    remoteReady = false;
     updateSyncUI();
     const profile = profileById(profileId);
     const { data, error } = await withTimeout(
       supabaseClient
         .from(REMOTE_TABLE)
-        .select('data, updated_at')
+        .select('data, updated_at, revision')
         .eq('user_id', syncSession.user.id)
         .eq('profile_id', profile.id)
         .maybeSingle(),
@@ -613,25 +586,38 @@
 
     isRemoteLoading = false;
     if (error) {
+      remoteReady = false;
       updateSyncUI();
       toast(`Błąd synchronizacji: ${error.message}`);
       return;
     }
 
     if (data && data.data) {
-      state = normalizeState(data.data);
+      const remoteState = normalizeState(data.data);
+      const localState = normalizeState(state);
+      const mergedState = mergeStates(remoteState, localState, { preferSettings: 'base' });
+      const remoteChanged = stableStringify(mergedState) !== stableStringify(remoteState);
+      state = mergedState;
+      localStorage.setItem(storageKey(profile.id), JSON.stringify(state));
+      setRemoteRevision(profile.id, numberValue(data.revision, 0));
+      remoteReady = true;
+      const beforeCoach = stableStringify(state.dailyCoach);
+      ensureDailyCoach(currentDate);
       localStorage.setItem(storageKey(profile.id), JSON.stringify(state));
       render();
+      if (remoteChanged || beforeCoach !== stableStringify(state.dailyCoach)) scheduleRemoteSave();
       return;
     }
 
+    remoteReady = true;
+    setRemoteRevision(profile.id, 0);
     await saveRemoteProfile(profile.id, state);
     render();
     updateSyncUI();
   }
 
   function scheduleRemoteSave() {
-    if (!canSync() || !currentProfileAssignment || isRemoteLoading) return;
+    if (!canSync() || !currentProfileAssignment || isRemoteLoading || !remoteReady) return;
     clearTimeout(remoteSaveTimer);
     const profileId = currentProfileId;
     const snapshot = structuredCloneSafe(state);
@@ -643,20 +629,185 @@
   async function saveRemoteProfile(profileId, snapshot) {
     if (!canSync()) return;
     if (!currentProfileAssignment || currentProfileAssignment.profile_id !== profileId) return;
+    if (!remoteReady) return;
+
+    if (remoteSaveInFlight) {
+      pendingRemoteSave = true;
+      return remoteSaveInFlight;
+    }
+
+    remoteSaveInFlight = saveRemoteProfileInternal(profileId, snapshot)
+      .finally(() => {
+        remoteSaveInFlight = null;
+        if (pendingRemoteSave) {
+          pendingRemoteSave = false;
+          scheduleRemoteSave();
+        }
+      });
+    return remoteSaveInFlight;
+  }
+
+  async function saveRemoteProfileInternal(profileId, snapshot, attempt = 0) {
     const profile = profileById(profileId);
-    const { error } = await supabaseClient
+    const { data: remote, error: fetchError } = await supabaseClient
       .from(REMOTE_TABLE)
-      .upsert({
-        user_id: syncSession.user.id,
-        profile_id: profile.id,
+      .select('data, revision')
+      .eq('user_id', syncSession.user.id)
+      .eq('profile_id', profile.id)
+      .maybeSingle();
+
+    if (fetchError) {
+      toast(`Nie udało się pobrać aktualnej chmury: ${fetchError.message}`);
+      return;
+    }
+
+    const remoteState = normalizeState(remote && remote.data ? remote.data : {});
+    const remoteRevision = remote ? numberValue(remote.revision, 0) : 0;
+    const merged = mergeStates(remoteState, snapshot, { preferSettings: 'incoming' });
+    const nextRevision = remoteRevision + 1;
+
+    if (!remote) {
+      const { data, error } = await supabaseClient
+        .from(REMOTE_TABLE)
+        .upsert({
+          user_id: syncSession.user.id,
+          profile_id: profile.id,
+          name: profileName(profile.id),
+          data: merged,
+          revision: nextRevision,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id,profile_id' })
+        .select('revision')
+        .maybeSingle();
+
+      if (error) {
+        toast(`Nie udało się zapisać w chmurze: ${error.message}`);
+        return;
+      }
+
+      setRemoteRevision(profile.id, numberValue(data && data.revision, nextRevision));
+      syncLocalStateAfterRemoteSave(profile.id, snapshot, merged);
+      return;
+    }
+
+    const { data: updated, error } = await supabaseClient
+      .from(REMOTE_TABLE)
+      .update({
         name: profileName(profile.id),
-        data: snapshot,
+        data: merged,
+        revision: nextRevision,
         updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id,profile_id' });
+      })
+      .eq('user_id', syncSession.user.id)
+      .eq('profile_id', profile.id)
+      .eq('revision', remoteRevision)
+      .select('revision')
+      .maybeSingle();
 
     if (error) {
       toast(`Nie udało się zapisać w chmurze: ${error.message}`);
+      return;
     }
+
+    if (!updated) {
+      if (attempt < 1) return saveRemoteProfileInternal(profileId, merged, attempt + 1);
+      toast('Synchronizacja wykryła konflikt. Odświeżam dane przed kolejnym zapisem.');
+      await loadRemoteProfile(profileId);
+      return;
+    }
+
+    setRemoteRevision(profile.id, numberValue(updated.revision, nextRevision));
+    syncLocalStateAfterRemoteSave(profile.id, snapshot, merged);
+  }
+
+  function syncLocalStateAfterRemoteSave(profileId, snapshot, merged) {
+    if (profileId !== currentProfileId) return;
+    if (stableStringify(state) === stableStringify(snapshot)) {
+      state = normalizeState(merged);
+      localStorage.setItem(storageKey(profileId), JSON.stringify(state));
+    }
+  }
+
+  function mergeStates(baseState, incomingState, options = {}) {
+    const base = normalizeState(baseState);
+    const incoming = normalizeState(incomingState);
+    const deletedEntryIds = uniqueStrings([
+      ...base.deletedEntryIds,
+      ...incoming.deletedEntryIds
+    ]);
+
+    return normalizeState({
+      version: Math.max(numberValue(base.version, 1), numberValue(incoming.version, 1)),
+      settings: options.preferSettings === 'base'
+        ? { ...defaultState.settings, ...base.settings }
+        : { ...defaultState.settings, ...incoming.settings },
+      foods: mergeFoods(base.foods, incoming.foods),
+      entries: mergeEntries(base.entries, incoming.entries, deletedEntryIds),
+      weights: mergeByDate(base.weights, incoming.weights),
+      water: mergeByDate(base.water, incoming.water),
+      dailyCoach: { ...base.dailyCoach, ...incoming.dailyCoach },
+      deletedEntryIds
+    });
+  }
+
+  function mergeEntries(baseEntries, incomingEntries, deletedEntryIds) {
+    const deleted = new Set(deletedEntryIds);
+    const byId = new Map();
+    [...baseEntries, ...incomingEntries].forEach((entry) => {
+      if (!entry || !entry.id || deleted.has(entry.id)) return;
+      byId.set(entry.id, { ...(byId.get(entry.id) || {}), ...entry });
+    });
+    return [...byId.values()].sort((a, b) => {
+      const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));
+      if (dateCompare !== 0) return dateCompare;
+      return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+    });
+  }
+
+  function mergeFoods(baseFoods, incomingFoods) {
+    const byKey = new Map();
+    [...baseFoods, ...incomingFoods].forEach((food) => {
+      if (!food || !food.name) return;
+      const key = normalize(food.name) || food.id;
+      byKey.set(key, { ...(byKey.get(key) || {}), ...food });
+    });
+    return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function mergeByDate(baseItems, incomingItems) {
+    const byDate = new Map();
+    [...baseItems, ...incomingItems].forEach((item) => {
+      if (!item || !item.date) return;
+      byDate.set(item.date, { ...(byDate.get(item.date) || {}), ...item });
+    });
+    return [...byDate.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  }
+
+  function uniqueStrings(values) {
+    return [...new Set(values.filter((value) => typeof value === 'string' && value.trim()).map((value) => value.trim()))];
+  }
+
+  function markEntryDeleted(entryId) {
+    if (!entryId) return;
+    if (!Array.isArray(state.deletedEntryIds)) state.deletedEntryIds = [];
+    if (!state.deletedEntryIds.includes(entryId)) state.deletedEntryIds.push(entryId);
+  }
+
+  function stableStringify(value) {
+    return JSON.stringify(value);
+  }
+
+  function remoteRevisionKey(profileId) {
+    return `${REMOTE_REVISION_PREFIX}:${profileId}`;
+  }
+
+  function loadRemoteRevision(profileId) {
+    return numberValue(localStorage.getItem(remoteRevisionKey(profileId)), 0);
+  }
+
+  function setRemoteRevision(profileId, revision) {
+    lastRemoteRevision = numberValue(revision, 0);
+    localStorage.setItem(remoteRevisionKey(profileId), String(lastRemoteRevision));
   }
 
   function renderSummary() {
@@ -676,13 +827,13 @@
     const stamp = $('daily-coach-stamp');
     if (!note || !list || !stamp) return;
 
-    const coach = getDailyCoach(currentDate);
+    const coach = getDailyCoach(currentDate, false);
     note.textContent = coach.note;
     list.innerHTML = coach.suggestions.map((item) => `<li>${escapeHTML(item)}</li>`).join('');
     stamp.textContent = 'Raz dziennie';
   }
 
-  function getDailyCoach(date) {
+  function getDailyCoach(date, persist = true) {
     if (!state.dailyCoach || typeof state.dailyCoach !== 'object' || Array.isArray(state.dailyCoach)) {
       state.dailyCoach = {};
     }
@@ -690,9 +841,12 @@
     if (state.dailyCoach[date]) return state.dailyCoach[date];
 
     const coach = buildDailyCoach(date);
-    state.dailyCoach[date] = coach;
-    saveState();
+    if (persist) state.dailyCoach[date] = coach;
     return coach;
+  }
+
+  function ensureDailyCoach(date) {
+    return getDailyCoach(date, true);
   }
 
   function buildDailyCoach(date) {
@@ -1168,6 +1322,7 @@
     const todayEntries = entriesForDate(currentDate);
     if (todayEntries.length && !window.confirm('Zastąpić dzisiejszy dziennik wpisami z wczoraj?')) return;
 
+    todayEntries.forEach((entry) => markEntryDeleted(entry.id));
     state.entries = state.entries.filter((entry) => entry.date !== currentDate);
     source.forEach((entry) => {
       state.entries.push({
@@ -1638,8 +1793,12 @@
 
   function resetApp() {
     if (!window.confirm(`Usunąć dane profilu ${profileName()}?`)) return;
+    const deletedEntryIds = uniqueStrings([
+      ...((state && state.deletedEntryIds) || []),
+      ...((state && state.entries) || []).map((entry) => entry.id)
+    ]);
     localStorage.removeItem(storageKey(currentProfileId));
-    state = structuredCloneSafe(defaultState);
+    state = normalizeState({ ...structuredCloneSafe(defaultState), deletedEntryIds });
     currentDate = todayISO();
     clearImport();
     saveState();
@@ -2131,7 +2290,8 @@
       water: Array.isArray(rawState && rawState.water) ? rawState.water : [],
       dailyCoach: rawState && rawState.dailyCoach && typeof rawState.dailyCoach === 'object' && !Array.isArray(rawState.dailyCoach)
         ? rawState.dailyCoach
-        : {}
+        : {},
+      deletedEntryIds: Array.isArray(rawState && rawState.deletedEntryIds) ? uniqueStrings(rawState.deletedEntryIds) : []
     };
   }
 
@@ -2146,6 +2306,8 @@
   }
 
   function saveState() {
+    ensureDailyCoach(currentDate);
+    state = normalizeState(state);
     localStorage.setItem(storageKey(currentProfileId), JSON.stringify(state));
     scheduleRemoteSave();
   }
