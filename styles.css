@@ -363,7 +363,7 @@ select:focus {
   bottom: 10px;
   z-index: 14;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
   padding: 6px;
   margin-bottom: 0;
@@ -662,6 +662,101 @@ select:focus {
   grid-template-columns: 1fr;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.dashboard-meals-panel {
+  margin-bottom: 12px;
+}
+
+.dashboard-meal-list {
+  display: grid;
+  gap: 10px;
+}
+
+.dashboard-meal-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 72px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  padding: 10px;
+}
+
+.dashboard-meal-icon,
+.dashboard-empty-meals > svg {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.dashboard-meal-card strong,
+.dashboard-empty-meals strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-meal-card span,
+.dashboard-empty-meals span,
+.dashboard-meal-macro span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.dashboard-meal-macro {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  min-width: 86px;
+}
+
+.dashboard-meal-macro strong {
+  font-size: 1.1rem;
+}
+
+.dashboard-empty-meals {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 76px;
+  border: 1px dashed #b9c4b8;
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  padding: 12px;
+}
+
+.logging-hero {
+  display: grid;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(247, 251, 244, 0.94)),
+    radial-gradient(circle at 95% 10%, rgba(62, 138, 80, 0.12), transparent 34%);
+  box-shadow: var(--shadow);
+}
+
+.logging-hero h2 {
+  margin: 8px 0 4px;
+  font-size: clamp(1.7rem, 4vw, 2.45rem);
+  line-height: 1.05;
+  letter-spacing: 0;
+}
+
+.logging-hero p {
+  margin: 0;
+  color: var(--muted);
 }
 
 .insight-card {
@@ -1853,6 +1948,14 @@ th {
 
   .dashboard-insight-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dashboard-meal-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .logging-hero {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .trend-summary-grid {

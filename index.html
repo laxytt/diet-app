@@ -100,9 +100,13 @@
       </section>
 
       <nav class="tabbar" aria-label="Sekcje aplikacji">
-        <button class="tab-button active" type="button" data-view="diary">
+        <button class="tab-button active" type="button" data-view="dashboard">
           <i data-lucide="house"></i>
           <span>Panel</span>
+        </button>
+        <button class="tab-button" type="button" data-view="diary">
+          <i data-lucide="notebook-tabs"></i>
+          <span>Dziennik</span>
         </button>
         <button class="tab-button" type="button" data-view="foods">
           <i data-lucide="database"></i>
@@ -127,7 +131,7 @@
       </nav>
 
       <main id="main-content">
-        <section class="view active" id="view-diary">
+        <section class="view active" id="view-dashboard">
           <section class="dashboard-hero">
             <div>
               <span class="section-kicker">Dashboard</span>
@@ -253,6 +257,17 @@
             </article>
           </section>
 
+          <section class="panel dashboard-meals-panel">
+            <div class="panel-heading compact-heading">
+              <h2>Dzisiejsze posiłki</h2>
+              <button class="ghost-button compact" type="button" id="dashboard-open-diary">
+                <i data-lucide="notebook-tabs"></i>
+                Otwórz dziennik
+              </button>
+            </div>
+            <div id="dashboard-meal-list" class="dashboard-meal-list"></div>
+          </section>
+
           <section class="panel coach-panel" aria-label="Plan dnia">
             <div class="coach-media">
               <img src="assets/healthy-food-hero.jpg" alt="Zdrowy posiłek z kurczakiem, warzywami, owocami i wodą">
@@ -265,6 +280,20 @@
               <p id="daily-coach-note"></p>
               <ul id="daily-coach-suggestions" class="coach-list"></ul>
             </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-diary">
+          <section class="logging-hero">
+            <div>
+              <span class="section-kicker">Dziennik</span>
+              <h2>Notowanie jedzenia</h2>
+              <p>Dodawaj posiłki, poprawiaj makro i zapisuj pomiary bez mieszania tego z dashboardem.</p>
+            </div>
+            <button class="primary-button" type="button" id="diary-focus-add">
+              <i data-lucide="plus"></i>
+              Dodaj wpis
+            </button>
           </section>
 
           <section class="workspace-grid">

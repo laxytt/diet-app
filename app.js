@@ -193,6 +193,8 @@
     $('gate-signup-button').addEventListener('click', signUpUser);
     $('gate-google-button').addEventListener('click', loginWithGoogle);
     $('quick-add-meal').addEventListener('click', focusMealForm);
+    $('dashboard-open-diary').addEventListener('click', () => switchView('diary'));
+    $('diary-focus-add').addEventListener('click', focusMealForm);
     $('plan-snack-button').addEventListener('click', planSnack);
     $('dashboard-search').addEventListener('keydown', handleDashboardSearch);
     ['entry-food', 'entry-grams', 'entry-unit', 'entry-calories', 'entry-protein', 'entry-carbs', 'entry-fat'].forEach((id) => {
@@ -264,6 +266,7 @@
     renderProfileVisuals();
     renderDailyCoach();
     renderDashboardInsights();
+    renderDashboardMeals();
     renderDatalist();
     renderDiary();
     renderBodyInputs();
@@ -2036,6 +2039,47 @@
     $('dashboard-recommendation').textContent = (coach.suggestions && coach.suggestions[0])
       ? coach.suggestions[0]
       : 'Zaplanuj prostą przekąskę białkową na później.';
+  }
+
+  function renderDashboardMeals() {
+    const container = $('dashboard-meal-list');
+    if (!container) return;
+    const entries = entriesForDate(currentDate)
+      .sort((a, b) => {
+        const mealCompare = MEALS.indexOf(a.meal) - MEALS.indexOf(b.meal);
+        if (mealCompare !== 0) return mealCompare;
+        return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+      });
+
+    if (!entries.length) {
+      container.innerHTML = `
+        <div class="dashboard-empty-meals">
+          <i data-lucide="notebook-tabs"></i>
+          <div>
+            <strong>Brak wpisów na dziś</strong>
+            <span>Otwórz dziennik i dodaj pierwszy posiłek.</span>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = entries.slice(0, 6).map((entry) => {
+      const meta = mealMeta(entry.meal);
+      return `
+        <article class="dashboard-meal-card">
+          <span class="dashboard-meal-icon"><i data-lucide="${meta.icon}"></i></span>
+          <div>
+            <strong title="${escapeHTML(entry.foodName)}">${escapeHTML(entry.foodName)}</strong>
+            <span>${mealLabel(entry.meal)} · ${formatEntryAmount(entry)}</span>
+          </div>
+          <div class="dashboard-meal-macro">
+            <strong>${Math.round(entry.calories)}</strong>
+            <span>${round1(entry.protein)}b / ${round1(entry.carbs)}w / ${round1(entry.fat)}t</span>
+          </div>
+        </article>
+      `;
+    }).join('');
   }
 
   function renderTrendSummary() {
