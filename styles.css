@@ -341,6 +341,11 @@ select:focus {
   display: none;
 }
 
+.app-shell.auth-loading .auth-form {
+  opacity: 0.62;
+  pointer-events: none;
+}
+
 .auth-gate {
   display: grid;
   justify-items: center;
@@ -604,6 +609,10 @@ select:focus {
   gap: 12px;
 }
 
+.recipe-builder {
+  margin-top: 12px;
+}
+
 .recipe-card {
   display: grid;
   grid-template-columns: 46px minmax(0, 1fr);
@@ -637,6 +646,10 @@ select:focus {
   color: var(--muted);
 }
 
+.recipe-content {
+  min-width: 0;
+}
+
 .recipe-meta {
   display: flex;
   flex-wrap: wrap;
@@ -654,6 +667,11 @@ select:focus {
   padding: 0 8px;
   font-size: 0.8rem;
   font-weight: 750;
+}
+
+.recipe-actions {
+  justify-content: flex-start;
+  margin-top: 12px;
 }
 
 .metric-card,
@@ -748,6 +766,7 @@ select:focus {
   grid-template-columns: 1fr;
   gap: 12px;
   align-items: start;
+  min-width: 0;
 }
 
 .foods-layout {
@@ -790,6 +809,7 @@ select:focus {
 .entry-form,
 .body-form,
 .food-form,
+.recipe-form,
 .settings-form,
 .auth-form {
   display: grid;
@@ -798,6 +818,7 @@ select:focus {
 
 .entry-form,
 .food-form,
+.recipe-form,
 .settings-form,
 .auth-form {
   grid-template-columns: 1fr;
@@ -1036,6 +1057,7 @@ textarea:focus {
   gap: 10px;
   border-top: 1px solid var(--line);
   padding: 10px 12px;
+  min-width: 0;
 }
 
 .entry-row:hover,
@@ -1061,6 +1083,7 @@ textarea:focus {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .entry-row small,
@@ -1078,6 +1101,7 @@ textarea:focus {
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
+  min-width: 0;
 }
 
 .empty-state {
@@ -1102,6 +1126,8 @@ textarea:focus {
 .food-list {
   display: grid;
   gap: 8px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .food-row {
@@ -1338,6 +1364,7 @@ th {
 
   .entry-form,
   .food-form,
+  .recipe-form,
   .settings-form,
   .auth-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1517,7 +1544,7 @@ th {
   }
 
   .foods-layout {
-    grid-template-columns: minmax(0, 1.2fr) minmax(300px, 420px);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .settings-grid,
@@ -1535,6 +1562,11 @@ th {
     grid-template-columns: minmax(310px, 420px) minmax(0, 1fr) minmax(260px, 340px);
   }
 
+  .foods-layout,
+  .recipe-builder {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .side-panel {
     grid-column: auto;
   }
@@ -1544,7 +1576,7 @@ th {
   }
 
   .food-row {
-    grid-template-columns: minmax(150px, 1fr) repeat(4, minmax(54px, 78px)) 112px;
+    grid-template-columns: minmax(0, 1fr) repeat(4, minmax(42px, 58px)) 112px;
   }
 
   .entry-row .hide-sm,
@@ -1554,5 +1586,11 @@ th {
 
   .recipe-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1380px) {
+  .foods-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(330px, 420px);
   }
 }

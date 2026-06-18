@@ -64,9 +64,9 @@
           </div>
           <p>Dane profili są prywatne i widoczne dopiero po zalogowaniu.</p>
           <form id="gate-auth-form" class="auth-form">
-            <label class="wide">
-              <span>Nazwa użytkownika przy rejestracji</span>
-              <input id="gate-auth-username" type="text" autocomplete="nickname" placeholder="Np. Agnieszka">
+            <label class="wide signup-field" hidden>
+              <span>Nazwa użytkownika</span>
+              <input id="gate-auth-username" type="text" autocomplete="name" placeholder="Np. Agnieszka">
             </label>
             <label class="wide">
               <span>Email</span>
@@ -84,6 +84,10 @@
               <button class="secondary-button" id="gate-signup-button" type="button">
                 <i data-lucide="user-plus"></i>
                 Utwórz konto
+              </button>
+              <button class="secondary-button google-button" id="gate-google-button" type="button">
+                <i data-lucide="chrome"></i>
+                Zaloguj przez Google
               </button>
             </div>
           </form>
@@ -370,7 +374,7 @@
             </div>
           </section>
 
-          <section class="recipe-grid" aria-label="Lista przepisów">
+          <section class="recipe-grid" id="recipe-list" aria-label="Lista przepisów">
             <article class="recipe-card">
               <div class="recipe-icon"><i data-lucide="salad"></i></div>
               <div>
@@ -419,6 +423,61 @@
                 </div>
               </div>
             </article>
+          </section>
+
+          <section class="workspace-grid recipe-builder">
+            <div class="panel recipe-form-panel">
+              <div class="panel-heading">
+                <h2>Własny przepis</h2>
+                <span class="stat-chip">Porcja</span>
+              </div>
+              <form id="recipe-form" class="recipe-form">
+                <input type="hidden" id="recipe-id">
+                <label class="wide">
+                  <span>Nazwa</span>
+                  <input id="recipe-name" required placeholder="Np. sałatka z kurczakiem">
+                </label>
+                <label class="wide">
+                  <span>Opis</span>
+                  <input id="recipe-description" placeholder="Krótki opis przepisu">
+                </label>
+                <label>
+                  <span>Kalorie</span>
+                  <input id="recipe-calories" type="number" min="0" step="1" required>
+                </label>
+                <label>
+                  <span>Białko</span>
+                  <input id="recipe-protein" type="number" min="0" step="0.1" required>
+                </label>
+                <label>
+                  <span>Węglowodany</span>
+                  <input id="recipe-carbs" type="number" min="0" step="0.1" required>
+                </label>
+                <label>
+                  <span>Tłuszcz</span>
+                  <input id="recipe-fat" type="number" min="0" step="0.1" required>
+                </label>
+                <label>
+                  <span>Czas</span>
+                  <input id="recipe-time" type="number" min="0" step="1" placeholder="min">
+                </label>
+                <label class="wide">
+                  <span>Składniki</span>
+                  <textarea id="recipe-ingredients" placeholder="Wpisz składniki, każdy od nowej linii"></textarea>
+                </label>
+                <label class="wide">
+                  <span>Przygotowanie</span>
+                  <textarea id="recipe-steps" placeholder="Krótki sposób przygotowania"></textarea>
+                </label>
+                <div class="button-row wide">
+                  <button class="primary-button" type="submit">
+                    <i data-lucide="save"></i>
+                    Zapisz przepis
+                  </button>
+                  <button class="ghost-button" type="button" id="reset-recipe-form">Wyczyść</button>
+                </div>
+              </form>
+            </div>
           </section>
         </section>
 
@@ -500,9 +559,9 @@
                 <span id="auth-state" class="stat-chip">Lokalnie</span>
               </div>
               <form id="auth-form" class="auth-form">
-                <label class="wide">
-                  <span>Nazwa użytkownika przy rejestracji</span>
-                  <input id="auth-username" type="text" autocomplete="nickname" placeholder="Np. Agnieszka">
+                <label class="wide signup-field" hidden>
+                  <span>Nazwa użytkownika</span>
+                  <input id="auth-username" type="text" autocomplete="name" placeholder="Np. Agnieszka">
                 </label>
                 <label class="wide">
                   <span>Email</span>
@@ -520,6 +579,10 @@
                   <button class="secondary-button" id="signup-button" type="button">
                     <i data-lucide="user-plus"></i>
                     Utwórz konto
+                  </button>
+                  <button class="secondary-button google-button" id="google-button" type="button">
+                    <i data-lucide="chrome"></i>
+                    Zaloguj przez Google
                   </button>
                   <button class="ghost-button" id="logout-button" type="button">
                     <i data-lucide="log-out"></i>

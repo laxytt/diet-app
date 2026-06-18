@@ -57,6 +57,49 @@
     foodSeed('Odżywka białkowa', 30, 120, 24, 3, 1.5, 0)
   ];
 
+  const seedRecipes = [
+    recipeSeed(
+      'Miska białkowa z kurczakiem',
+      'Kurczak, kasza lub ryż, dużo warzyw, sos jogurtowy i odrobina oliwy.',
+      520,
+      42,
+      48,
+      16,
+      20,
+      ['Pierś z kurczaka', 'Kasza albo ryż', 'Warzywa', 'Jogurt naturalny', 'Oliwa']
+    ),
+    recipeSeed(
+      'Skyr z owocami i chrupiącym dodatkiem',
+      'Skyr, jagody lub maliny, płatki owsiane, orzechy i cynamon.',
+      330,
+      28,
+      42,
+      7,
+      5,
+      ['Skyr', 'Owoce jagodowe', 'Płatki owsiane', 'Orzechy', 'Cynamon']
+    ),
+    recipeSeed(
+      'Łosoś z ziemniakami i sałatką',
+      'Porcja ryby, gotowane ziemniaki, warzywa i lekki dressing cytrynowy.',
+      610,
+      36,
+      54,
+      27,
+      25,
+      ['Łosoś', 'Ziemniaki', 'Mix sałat', 'Cytryna', 'Jogurt lub oliwa']
+    ),
+    recipeSeed(
+      'Zupa warzywna z soczewicą',
+      'Duża objętość, dużo błonnika i wygodna porcja na dwa dni.',
+      420,
+      24,
+      58,
+      10,
+      35,
+      ['Soczewica', 'Marchew', 'Pomidory', 'Bulion', 'Przyprawy']
+    )
+  ];
+
   const defaultState = {
     version: 1,
     settings: {
@@ -67,6 +110,7 @@
       water: 2500
     },
     foods: seedFoods,
+    recipes: seedRecipes,
     entries: [],
     weights: [],
     water: [],
@@ -93,6 +137,9 @@
   let isRemoteLoading = false;
   let remoteReady = false;
   let lastRemoteRevision = loadRemoteRevision(currentProfileId);
+  let isAuthInitializing = true;
+  const signupModes = { gate: false, settings: false };
+  let sessionRefreshPromise = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -105,9 +152,11 @@
     $('selected-date').value = currentDate;
     $('xlsx-status').textContent = window.XLSX ? 'Parser Excela gotowy' : 'CSV gotowe';
     updateSyncUI();
-    render();
     await refreshSupabaseSession();
     if (canSync()) await loadAssignedProfile();
+    isAuthInitializing = false;
+    updateSyncUI();
+    render();
     registerServiceWorker();
   }
 
@@ -138,6 +187,7 @@
     $('ai-result').addEventListener('click', handleAIResultAction);
     $('gate-auth-form').addEventListener('submit', loginUser);
     $('gate-signup-button').addEventListener('click', signUpUser);
+    $('gate-google-button').addEventListener('click', loginWithGoogle);
     ['entry-food', 'entry-grams', 'entry-unit', 'entry-calories', 'entry-protein', 'entry-carbs', 'entry-fat'].forEach((id) => {
       $(id).addEventListener('input', updateEntryPreview);
     });
@@ -168,11 +218,15 @@
     $('food-form').addEventListener('submit', saveFood);
     $('reset-food-form').addEventListener('click', resetFoodForm);
     $('food-list').addEventListener('click', handleFoodAction);
+    $('recipe-form').addEventListener('submit', saveRecipe);
+    $('reset-recipe-form').addEventListener('click', resetRecipeForm);
+    $('recipe-list').addEventListener('click', handleRecipeAction);
 
     $('trend-range').addEventListener('change', () => renderCharts());
     $('settings-form').addEventListener('submit', saveSettings);
     $('auth-form').addEventListener('submit', loginUser);
     $('signup-button').addEventListener('click', signUpUser);
+    $('google-button').addEventListener('click', loginWithGoogle);
     $('logout-button').addEventListener('click', logoutUser);
     $('export-json').addEventListener('click', exportJSON);
     $('export-csv').addEventListener('click', exportCSV);
@@ -186,6 +240,9 @@
       clearTimeout(chartTimer);
       chartTimer = window.setTimeout(renderCharts, 120);
     });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) refreshSessionAfterFocus();
+    });
   }
 
   function render() {
@@ -197,6 +254,7 @@
     renderDiary();
     renderBodyInputs();
     renderFoods();
+    renderRecipes();
     renderSettings();
     renderStorageNote();
     renderAIResult();
@@ -294,6 +352,11 @@
     });
     supabaseClient.auth.onAuthStateChange(async (_event, session) => {
       syncSession = session;
+      if (isAuthInitializing) {
+        updateSyncUI();
+        renderProfileBadge();
+        return;
+      }
       if (canSync() && !currentProfileAssignment) {
         await loadAssignedProfile();
       } else {
@@ -306,6 +369,7 @@
 
   async function refreshSupabaseSession() {
     if (!supabaseClient) return;
+    await restoreSessionFromUrl();
     const { data, error } = await supabaseClient.auth.getSession();
     if (error) {
       toast('Nie udało się odczytać sesji Supabase.');
@@ -313,6 +377,39 @@
     }
     syncSession = data.session;
     updateSyncUI();
+  }
+
+  async function restoreSessionFromUrl() {
+    if (!window.location.hash || !window.location.hash.includes('access_token=')) return;
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+    if (!accessToken || !refreshToken) return;
+
+    const { data, error } = await supabaseClient.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken
+    });
+    if (error) {
+      toast(`Nie udało się przywrócić sesji: ${error.message}`);
+      return;
+    }
+    syncSession = data.session;
+    window.history.replaceState(null, document.title, authRedirectUrl());
+  }
+
+  async function refreshSessionAfterFocus() {
+    if (!supabaseClient || isAuthInitializing || sessionRefreshPromise) return;
+    sessionRefreshPromise = (async () => {
+      const { data, error } = await supabaseClient.auth.getSession();
+      if (!error) syncSession = data.session;
+      if (canSync() && !currentProfileAssignment) await loadAssignedProfile();
+      updateSyncUI();
+      renderProfileBadge();
+    })().finally(() => {
+      sessionRefreshPromise = null;
+    });
+    await sessionRefreshPromise;
   }
 
   function canSync() {
@@ -331,9 +428,10 @@
 
     syncStatus.classList.remove('online', 'error');
     authState.classList.remove('online', 'error');
-    const locked = Boolean(supabaseClient && (!syncSession || !currentProfileAssignment));
+    const locked = Boolean(supabaseClient && (isAuthInitializing || !syncSession || !currentProfileAssignment));
     if (appShell) appShell.classList.toggle('locked', locked);
     if (appShell) appShell.classList.toggle('auth-mode', locked);
+    if (appShell) appShell.classList.toggle('auth-loading', Boolean(supabaseClient && isAuthInitializing));
     if (authGate) authGate.hidden = !locked;
     if (locked && todaySummary) todaySummary.textContent = 'Zaloguj się, żeby zobaczyć dane profilu';
 
@@ -341,6 +439,13 @@
       syncStatus.textContent = 'Lokalnie';
       authState.textContent = 'Brak konfiguracji';
       syncNote.textContent = 'Dodaj dane Supabase w config.js, żeby synchronizować dane między urządzeniami.';
+      return;
+    }
+
+    if (isAuthInitializing) {
+      syncStatus.textContent = 'Sprawdzam sesję';
+      authState.textContent = 'Ładowanie';
+      syncNote.textContent = 'Sprawdzam zapisane logowanie. To powinno potrwać chwilę.';
       return;
     }
 
@@ -399,7 +504,30 @@
     await loadAssignedProfile();
     setAuthBusy(source, false);
     if (!currentProfileAssignment) return;
+    setSignupMode(source, false);
     toast('Zalogowano i włączono synchronizację.');
+  }
+
+  async function loginWithGoogle(event) {
+    if (event) event.preventDefault();
+    if (!supabaseClient) {
+      toast('Najpierw skonfiguruj Supabase w config.js.');
+      return;
+    }
+
+    const { error } = await supabaseClient.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: authRedirectUrl(),
+        queryParams: {
+          prompt: 'select_account'
+        }
+      }
+    });
+
+    if (error) {
+      toast(`Google Auth: ${error.message}`);
+    }
   }
 
   async function signUpUser(event) {
@@ -410,6 +538,12 @@
     }
 
     const source = event && event.currentTarget && event.currentTarget.id === 'gate-signup-button' ? 'gate' : 'settings';
+    if (!signupModes[source]) {
+      setSignupMode(source, true);
+      toast('Uzupełnij nazwę użytkownika, email i hasło, żeby utworzyć konto.');
+      return;
+    }
+
     const credentials = readAuthCredentials(source);
     const email = credentials.email;
     const password = credentials.password;
@@ -443,11 +577,34 @@
     }
     setAuthBusy(source, false);
     updateSyncUI();
+    setSignupMode(source, false);
     if (data.session && !currentProfileAssignment) {
       toast('Konto utworzone, ale ten email nie ma przypisanego profilu diety.');
       return;
     }
     toast(data.session ? 'Konto utworzone i zalogowane.' : 'Konto utworzone. Sprawdź email, jeśli Supabase wymaga potwierdzenia.');
+  }
+
+  function setSignupMode(source, enabled) {
+    signupModes[source] = enabled;
+    const prefix = source === 'gate' ? 'gate-' : '';
+    const usernameInput = $(`${prefix}auth-username`);
+    const usernameField = usernameInput ? usernameInput.closest('.signup-field') : null;
+    const signupButton = source === 'gate' ? $('gate-signup-button') : $('signup-button');
+    const passwordInput = $(`${prefix}auth-password`);
+    if (usernameField) usernameField.hidden = !enabled;
+    if (usernameInput) {
+      usernameInput.required = enabled;
+      if (enabled) usernameInput.setAttribute('autocomplete', 'name');
+    }
+    if (passwordInput) passwordInput.setAttribute('autocomplete', enabled ? 'new-password' : 'current-password');
+    if (signupButton) {
+      signupButton.innerHTML = enabled
+        ? '<i data-lucide="user-plus"></i> Zarejestruj'
+        : '<i data-lucide="user-plus"></i> Utwórz konto';
+    }
+    refreshIcons();
+    if (enabled && usernameInput) usernameInput.focus();
   }
 
   function readAuthCredentials(source) {
@@ -473,7 +630,7 @@
       signupButton.disabled = busy;
       signupButton.innerHTML = busy && action === 'signup'
         ? `<i data-lucide="loader-circle"></i> ${label}`
-        : '<i data-lucide="user-plus"></i> Utwórz konto';
+        : `<i data-lucide="user-plus"></i> ${signupModes[source] ? 'Zarejestruj' : 'Utwórz konto'}`;
     }
     refreshIcons();
   }
@@ -508,6 +665,8 @@
     syncSession = null;
     currentProfileAssignment = null;
     remoteReady = false;
+    setSignupMode('gate', false);
+    setSignupMode('settings', false);
     updateSyncUI();
     toast('Wylogowano. Dane lokalne nadal są na tym urządzeniu.');
   }
@@ -742,6 +901,7 @@
         ? { ...defaultState.settings, ...base.settings }
         : { ...defaultState.settings, ...incoming.settings },
       foods: mergeFoods(base.foods, incoming.foods),
+      recipes: mergeRecipes(base.recipes, incoming.recipes),
       entries: mergeEntries(base.entries, incoming.entries, deletedEntryIds),
       weights: mergeByDate(base.weights, incoming.weights),
       water: mergeByDate(base.water, incoming.water),
@@ -770,6 +930,16 @@
       if (!food || !food.name) return;
       const key = normalize(food.name) || food.id;
       byKey.set(key, { ...(byKey.get(key) || {}), ...food });
+    });
+    return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function mergeRecipes(baseRecipes, incomingRecipes) {
+    const byKey = new Map();
+    [...baseRecipes, ...incomingRecipes].forEach((recipe) => {
+      if (!recipe || !recipe.name) return;
+      const key = recipe.id || normalize(recipe.name);
+      byKey.set(key, { ...(byKey.get(key) || {}), ...recipe });
     });
     return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -1475,6 +1645,182 @@
       render();
       toast('Produkt usunięty.');
     }
+  }
+
+  function renderRecipes() {
+    const recipes = Array.isArray(state.recipes) ? state.recipes : [];
+    $('recipe-list').innerHTML = recipes.length
+      ? recipes.map(renderRecipeCard).join('')
+      : '<div class="empty-state">Nie masz jeszcze przepisów. Dodaj pierwszy poniżej.</div>';
+    refreshIcons();
+  }
+
+  function renderRecipeCard(recipe) {
+    const ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients.slice(0, 4) : [];
+    return `
+      <article class="recipe-card">
+        <div class="recipe-icon"><i data-lucide="${recipeIcon(recipe)}"></i></div>
+        <div class="recipe-content">
+          <h3>${escapeHTML(recipe.name)}</h3>
+          <p>${escapeHTML(recipe.description || ingredients.join(', ') || 'Własny przepis zapisany w profilu.')}</p>
+          <div class="recipe-meta">
+            <span>${Math.round(numberValue(recipe.calories, 0))} kcal</span>
+            <span>${round1(recipe.protein)} g białka</span>
+            ${numberValue(recipe.time, 0) ? `<span>${Math.round(numberValue(recipe.time, 0))} min</span>` : ''}
+          </div>
+          <div class="row-actions recipe-actions">
+            <button class="icon-button" type="button" data-recipe-add="${recipe.id}" aria-label="Dodaj ${escapeHTML(recipe.name)} do dziennika" title="Dodaj do dziennika">
+              <i data-lucide="plus"></i>
+            </button>
+            <button class="icon-button" type="button" data-recipe-edit="${recipe.id}" aria-label="Edytuj ${escapeHTML(recipe.name)}" title="Edytuj">
+              <i data-lucide="pencil"></i>
+            </button>
+            ${recipe.custom ? `
+              <button class="icon-button" type="button" data-recipe-delete="${recipe.id}" aria-label="Usuń ${escapeHTML(recipe.name)}" title="Usuń">
+                <i data-lucide="trash-2"></i>
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  function recipeIcon(recipe) {
+    const name = normalize(recipe && recipe.name);
+    if (name.includes('losos') || name.includes('ryba')) return 'fish';
+    if (name.includes('zupa')) return 'soup';
+    if (name.includes('skyr') || name.includes('jogurt')) return 'milk';
+    return 'salad';
+  }
+
+  function saveRecipe(event) {
+    event.preventDefault();
+    const id = $('recipe-id').value || uid();
+    const recipe = {
+      id,
+      name: $('recipe-name').value.trim(),
+      description: $('recipe-description').value.trim(),
+      calories: numberValue($('recipe-calories').value, 0),
+      protein: numberValue($('recipe-protein').value, 0),
+      carbs: numberValue($('recipe-carbs').value, 0),
+      fat: numberValue($('recipe-fat').value, 0),
+      time: numberValue($('recipe-time').value, 0),
+      ingredients: linesFromTextarea('recipe-ingredients'),
+      steps: linesFromTextarea('recipe-steps'),
+      custom: true,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (!recipe.name) {
+      toast('Dodaj nazwę przepisu.');
+      return;
+    }
+
+    const existingIndex = state.recipes.findIndex((item) => item.id === id);
+    if (existingIndex >= 0) state.recipes[existingIndex] = recipe;
+    else state.recipes.push(recipe);
+
+    addRecipeAsFood(recipe);
+    saveState();
+    resetRecipeForm();
+    render();
+    toast('Przepis zapisany.');
+  }
+
+  function resetRecipeForm() {
+    $('recipe-id').value = '';
+    $('recipe-form').reset();
+  }
+
+  function handleRecipeAction(event) {
+    const add = event.target.closest('[data-recipe-add]');
+    const edit = event.target.closest('[data-recipe-edit]');
+    const remove = event.target.closest('[data-recipe-delete]');
+
+    if (add) {
+      const recipe = state.recipes.find((item) => item.id === add.dataset.recipeAdd);
+      if (!recipe) return;
+      addRecipeToDiary(recipe);
+      return;
+    }
+
+    if (edit) {
+      const recipe = state.recipes.find((item) => item.id === edit.dataset.recipeEdit);
+      if (!recipe) return;
+      $('recipe-id').value = recipe.id;
+      $('recipe-name').value = recipe.name || '';
+      $('recipe-description').value = recipe.description || '';
+      $('recipe-calories').value = numberValue(recipe.calories, 0);
+      $('recipe-protein').value = numberValue(recipe.protein, 0);
+      $('recipe-carbs').value = numberValue(recipe.carbs, 0);
+      $('recipe-fat').value = numberValue(recipe.fat, 0);
+      $('recipe-time').value = recipe.time || '';
+      $('recipe-ingredients').value = Array.isArray(recipe.ingredients) ? recipe.ingredients.join('\n') : '';
+      $('recipe-steps').value = Array.isArray(recipe.steps) ? recipe.steps.join('\n') : '';
+      $('recipe-name').focus();
+      return;
+    }
+
+    if (remove) {
+      const recipe = state.recipes.find((item) => item.id === remove.dataset.recipeDelete);
+      if (!recipe || !recipe.custom || !window.confirm(`Usunąć ${recipe.name}?`)) return;
+      state.recipes = state.recipes.filter((item) => item.id !== recipe.id);
+      saveState();
+      render();
+      toast('Przepis usunięty.');
+    }
+  }
+
+  function addRecipeToDiary(recipe) {
+    const food = addRecipeAsFood(recipe);
+    state.entries.push({
+      id: uid(),
+      date: currentDate,
+      meal: $('entry-meal').value || 'Dinner',
+      foodId: food ? food.id : null,
+      foodName: recipe.name,
+      amount: 1,
+      unit: 'porcja',
+      grams: 1,
+      calories: numberValue(recipe.calories, 0),
+      protein: numberValue(recipe.protein, 0),
+      carbs: numberValue(recipe.carbs, 0),
+      fat: numberValue(recipe.fat, 0),
+      createdAt: new Date().toISOString()
+    });
+    saveState();
+    render();
+    switchView('diary');
+    toast('Przepis dodany do dziennika.');
+  }
+
+  function addRecipeAsFood(recipe) {
+    if (!recipe || !recipe.name) return null;
+    const existing = findFoodByName(recipe.name);
+    const food = {
+      id: existing ? existing.id : uid(),
+      name: recipe.name,
+      servingGram: 1,
+      servingUnit: 'porcja',
+      calories: numberValue(recipe.calories, 0),
+      protein: numberValue(recipe.protein, 0),
+      carbs: numberValue(recipe.carbs, 0),
+      fat: numberValue(recipe.fat, 0),
+      fiber: 0,
+      custom: true,
+      favorite: Boolean(existing && existing.favorite)
+    };
+    if (existing) Object.assign(existing, food);
+    else state.foods.push(food);
+    return existing || food;
+  }
+
+  function linesFromTextarea(id) {
+    return ($(id).value || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
   }
 
   function renderSettings() {
@@ -2285,6 +2631,7 @@
       ...(rawState || {}),
       settings: { ...defaultState.settings, ...((rawState && rawState.settings) || {}) },
       foods: Array.isArray(rawState && rawState.foods) && rawState.foods.length ? rawState.foods : structuredCloneSafe(seedFoods),
+      recipes: Array.isArray(rawState && rawState.recipes) && rawState.recipes.length ? rawState.recipes : structuredCloneSafe(seedRecipes),
       entries: Array.isArray(rawState && rawState.entries) ? rawState.entries : [],
       weights: Array.isArray(rawState && rawState.weights) ? rawState.weights : [],
       water: Array.isArray(rawState && rawState.water) ? rawState.water : [],
@@ -2342,6 +2689,22 @@
       fiber,
       custom: false,
       favorite: false
+    };
+  }
+
+  function recipeSeed(name, description, calories, protein, carbs, fat, time, ingredients = []) {
+    return {
+      id: `seed-recipe-${normalize(name).replace(/[^a-z0-9]+/g, '-')}`,
+      name,
+      description,
+      calories,
+      protein,
+      carbs,
+      fat,
+      time,
+      ingredients,
+      steps: [],
+      custom: false
     };
   }
 
