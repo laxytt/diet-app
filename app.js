@@ -230,6 +230,7 @@
     $('recipe-form').addEventListener('submit', saveRecipe);
     $('reset-recipe-form').addEventListener('click', resetRecipeForm);
     $('recipe-list').addEventListener('click', handleRecipeAction);
+    $('recipe-premium-options').addEventListener('click', handlePaidRecipeAction);
 
     $('trend-range').addEventListener('change', () => {
       renderCharts();
@@ -1831,6 +1832,14 @@
       render();
       toast('Przepis usunięty.');
     }
+  }
+
+  function handlePaidRecipeAction(event) {
+    const button = event.target.closest('[data-paid-recipes]');
+    if (!button) return;
+    const variant = button.dataset.paidRecipes;
+    const label = variant === 'personalized' ? 'spersonalizowane przepisy' : 'standardowe przepisy';
+    toast(`Opcja „${label}” jest na razie zablokowana. Płatności dodamy w kolejnym kroku.`);
   }
 
   function addRecipeToDiary(recipe) {

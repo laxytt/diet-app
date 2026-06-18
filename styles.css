@@ -1037,6 +1037,147 @@ select:focus {
   gap: 12px;
 }
 
+.paid-recipes-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+
+.paid-recipes-intro,
+.paid-recipe-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow);
+}
+
+.paid-recipes-intro {
+  padding: 16px;
+  background:
+    radial-gradient(circle at 0 0, rgba(47, 125, 89, 0.12), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(248, 251, 246, 0.94));
+}
+
+.paid-recipes-intro h3 {
+  margin: 6px 0 7px;
+  font-size: 1.12rem;
+  letter-spacing: 0;
+}
+
+.paid-recipes-intro p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.paid-recipe-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 15px;
+  overflow: hidden;
+}
+
+.paid-recipe-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(47, 125, 89, 0.045) 0 8px,
+    transparent 8px 18px
+  );
+  pointer-events: none;
+}
+
+.paid-recipe-card.featured {
+  border-color: rgba(47, 125, 89, 0.34);
+  background:
+    radial-gradient(circle at 100% 0, rgba(47, 125, 89, 0.16), transparent 40%),
+    rgba(255, 255, 255, 0.94);
+}
+
+.paid-recipe-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius);
+  background: var(--green-soft);
+  color: var(--green);
+  position: relative;
+  z-index: 1;
+}
+
+.paid-recipe-copy,
+.paid-recipe-button {
+  position: relative;
+  z-index: 1;
+}
+
+.paid-recipe-copy h4 {
+  margin: 8px 0 6px;
+  font-size: 1rem;
+  letter-spacing: 0;
+}
+
+.paid-recipe-copy p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.paid-recipe-copy ul {
+  display: grid;
+  gap: 5px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.paid-recipe-copy li {
+  position: relative;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.paid-recipe-copy li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.lock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--green-dark);
+  padding: 0 9px;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.lock-chip svg {
+  width: 14px;
+  height: 14px;
+}
+
+.paid-recipe-button {
+  grid-column: 1 / -1;
+  width: 100%;
+  opacity: 0.78;
+}
+
 .recipe-builder {
   margin-top: 12px;
 }
@@ -2100,6 +2241,16 @@ th {
 
   .recipes-hero img {
     max-height: none;
+  }
+
+  .paid-recipes-panel {
+    grid-template-columns: minmax(220px, 0.72fr) repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .paid-recipes-intro,
+  .paid-recipe-card {
+    min-height: 100%;
   }
 
   .recipe-grid {
