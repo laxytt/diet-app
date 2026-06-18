@@ -111,6 +111,10 @@
     },
     foods: seedFoods,
     recipes: seedRecipes,
+    profile: {
+      avatarDataUrl: '',
+      avatarUpdatedAt: ''
+    },
     entries: [],
     weights: [],
     water: [],
@@ -188,6 +192,8 @@
     $('gate-auth-form').addEventListener('submit', loginUser);
     $('gate-signup-button').addEventListener('click', signUpUser);
     $('gate-google-button').addEventListener('click', loginWithGoogle);
+    $('quick-add-meal').addEventListener('click', focusMealForm);
+    $('dashboard-search').addEventListener('keydown', handleDashboardSearch);
     ['entry-food', 'entry-grams', 'entry-unit', 'entry-calories', 'entry-protein', 'entry-carbs', 'entry-fat'].forEach((id) => {
       $(id).addEventListener('input', updateEntryPreview);
     });
@@ -222,12 +228,17 @@
     $('reset-recipe-form').addEventListener('click', resetRecipeForm);
     $('recipe-list').addEventListener('click', handleRecipeAction);
 
-    $('trend-range').addEventListener('change', () => renderCharts());
+    $('trend-range').addEventListener('change', () => {
+      renderCharts();
+      renderTrendSummary();
+    });
     $('settings-form').addEventListener('submit', saveSettings);
     $('auth-form').addEventListener('submit', loginUser);
     $('signup-button').addEventListener('click', signUpUser);
     $('google-button').addEventListener('click', loginWithGoogle);
     $('logout-button').addEventListener('click', logoutUser);
+    $('avatar-input').addEventListener('change', handleAvatarUpload);
+    $('remove-avatar').addEventListener('click', removeAvatar);
     $('export-json').addEventListener('click', exportJSON);
     $('export-csv').addEventListener('click', exportCSV);
     $('reset-app').addEventListener('click', resetApp);
@@ -249,6 +260,7 @@
     $('selected-date').value = currentDate;
     renderProfileBadge();
     renderSummary();
+    renderProfileVisuals();
     renderDailyCoach();
     renderDatalist();
     renderDiary();
@@ -258,6 +270,7 @@
     renderSettings();
     renderStorageNote();
     renderAIResult();
+    renderTrendSummary();
     updateSyncUI();
     updateEntryPreview();
     renderCharts();
@@ -322,7 +335,10 @@
 
     const visible = Boolean(syncSession && currentProfileAssignment);
     badge.hidden = !visible;
-    if (visible) nameNode.textContent = profileName();
+    if (visible) {
+      nameNode.textContent = profileName();
+      renderProfileVisuals();
+    }
   }
 
   function withTimeout(promise, milliseconds, message) {
@@ -902,6 +918,7 @@
         : { ...defaultState.settings, ...incoming.settings },
       foods: mergeFoods(base.foods, incoming.foods),
       recipes: mergeRecipes(base.recipes, incoming.recipes),
+      profile: mergeProfile(base.profile, incoming.profile),
       entries: mergeEntries(base.entries, incoming.entries, deletedEntryIds),
       weights: mergeByDate(base.weights, incoming.weights),
       water: mergeByDate(base.water, incoming.water),
@@ -944,6 +961,16 @@
     return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  function mergeProfile(baseProfile = {}, incomingProfile = {}) {
+    const baseTime = Date.parse(baseProfile.avatarUpdatedAt || '') || 0;
+    const incomingTime = Date.parse(incomingProfile.avatarUpdatedAt || '') || 0;
+    return {
+      ...defaultState.profile,
+      ...(incomingTime >= baseTime ? baseProfile : incomingProfile),
+      ...(incomingTime >= baseTime ? incomingProfile : baseProfile)
+    };
+  }
+
   function mergeByDate(baseItems, incomingItems) {
     const byDate = new Map();
     [...baseItems, ...incomingItems].forEach((item) => {
@@ -983,12 +1010,21 @@
   function renderSummary() {
     const totals = totalsForDate(currentDate);
     const targets = state.settings;
+    const water = state.water.find((item) => item.date === currentDate);
+    const waterMl = numberValue(water && water.ml, 0);
+    const caloriesPercent = targets.calories > 0 ? Math.round((totals.calories / targets.calories) * 100) : 0;
     $('today-summary').textContent = `${formatDateLabel(currentDate)} · zapisano ${Math.round(totals.calories)} kcal`;
+    $('dashboard-title').textContent = `Dzisiaj, ${profileName()}`;
+    $('dashboard-subtitle').textContent = `${Math.max(0, Math.round(targets.calories - totals.calories))} kcal do celu · ${round1(totals.protein)} g białka · ${formatLiters(waterMl)} wody`;
 
     updateMetric('calories', totals.calories, targets.calories, 'kcal');
     updateMetric('protein', totals.protein, targets.protein, 'g');
     updateMetric('carbs', totals.carbs, targets.carbs, 'g');
     updateMetric('fat', totals.fat, targets.fat, 'g');
+    updateMetric('water', waterMl / 1000, targets.water / 1000, 'L');
+    $('calorie-ring').style.setProperty('--progress', `${Math.min(360, Math.max(0, caloriesPercent * 3.6))}deg`);
+    $('calorie-ring-value').textContent = `${Math.max(0, Math.min(999, caloriesPercent))}%`;
+    renderWaterDrops(waterMl, targets.water);
   }
 
   function renderDailyCoach() {
@@ -1086,14 +1122,17 @@
     const roundedTarget = unit === 'kcal' ? Math.round(target) : round1(target);
     const remaining = round1(target - value);
     const percent = target > 0 ? Math.max(0, Math.min(120, (value / target) * 100)) : 0;
-    $(`${key}-value`).textContent = `${roundedValue}${unit === 'kcal' ? '' : unit} / ${roundedTarget}${unit === 'kcal' ? '' : unit}`;
-    $(`${key}-meter`).style.width = `${percent}%`;
+    const valueNode = $(`${key}-value`);
+    const meterNode = $(`${key}-meter`);
+    if (valueNode) valueNode.textContent = `${roundedValue}${unit === 'kcal' ? '' : unit} / ${roundedTarget}${unit === 'kcal' ? '' : unit}`;
+    if (meterNode) meterNode.style.width = `${percent}%`;
 
     const detailId = key === 'calories' ? 'calories-remaining' : `${key}-detail`;
     const prefix = remaining >= 0
       ? `pozostało ${remaining}${unit === 'kcal' ? '' : unit}`
       : `${Math.abs(remaining)}${unit === 'kcal' ? '' : unit} ponad cel`;
-    $(detailId).textContent = prefix;
+    const detailNode = $(detailId);
+    if (detailNode) detailNode.textContent = prefix;
   }
 
   function renderDatalist() {
@@ -1823,6 +1862,144 @@
       .filter(Boolean);
   }
 
+  function renderProfileVisuals() {
+    const name = profileName();
+    const initial = name.trim().charAt(0).toUpperCase() || 'A';
+    const avatar = state.profile && state.profile.avatarDataUrl ? state.profile.avatarDataUrl : '';
+    setAvatar('profile-avatar', 'profile-avatar-initials', avatar, initial);
+    setAvatar('dashboard-avatar', 'dashboard-avatar-initials', avatar, initial);
+    setAvatar('settings-avatar', 'settings-avatar-initials', avatar, initial);
+    if ($('dashboard-profile-name')) $('dashboard-profile-name').textContent = name;
+    if ($('settings-profile-name')) $('settings-profile-name').textContent = name;
+  }
+
+  function setAvatar(imageId, initialsId, dataUrl, initial) {
+    const image = $(imageId);
+    const initials = $(initialsId);
+    if (!image || !initials) return;
+    image.hidden = !dataUrl;
+    initials.hidden = Boolean(dataUrl);
+    if (dataUrl) image.src = dataUrl;
+    else image.removeAttribute('src');
+    initials.textContent = initial;
+  }
+
+  async function handleAvatarUpload(event) {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast('Wybierz plik graficzny.');
+      return;
+    }
+
+    try {
+      const avatarDataUrl = await compressAvatar(file);
+      state.profile = {
+        ...(state.profile || {}),
+        avatarDataUrl,
+        avatarUpdatedAt: new Date().toISOString()
+      };
+      saveState();
+      render();
+      toast('Zdjęcie profilowe zapisane.');
+    } catch (error) {
+      toast(`Nie udało się dodać zdjęcia: ${error.message}`);
+    }
+  }
+
+  function removeAvatar() {
+    state.profile = {
+      ...(state.profile || {}),
+      avatarDataUrl: '',
+      avatarUpdatedAt: new Date().toISOString()
+    };
+    saveState();
+    render();
+    toast('Zdjęcie profilowe usunięte.');
+  }
+
+  async function compressAvatar(file) {
+    const image = await loadImageFromFile(file);
+    const size = 320;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Brak obsługi canvas.');
+
+    const sourceSize = Math.min(image.naturalWidth || image.width, image.naturalHeight || image.height);
+    const sourceX = ((image.naturalWidth || image.width) - sourceSize) / 2;
+    const sourceY = ((image.naturalHeight || image.height) - sourceSize) / 2;
+    ctx.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
+    const type = canvas.toDataURL('image/webp', 0.78).startsWith('data:image/webp') ? 'image/webp' : 'image/jpeg';
+    return canvas.toDataURL(type, 0.78);
+  }
+
+  function loadImageFromFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Nie udało się odczytać pliku.'));
+      reader.onload = () => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('Nie udało się wczytać obrazu.'));
+        image.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function focusMealForm() {
+    switchView('diary');
+    const input = $('entry-food');
+    if (input) {
+      input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      window.setTimeout(() => input.focus(), 250);
+    }
+  }
+
+  function handleDashboardSearch(event) {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const query = event.currentTarget.value.trim();
+    if (!query) return;
+    $('food-search').value = query;
+    switchView('foods');
+    renderFoods();
+  }
+
+  function renderWaterDrops(waterMl, targetMl) {
+    const container = $('water-drops');
+    if (!container) return;
+    const drops = 8;
+    const filled = targetMl > 0 ? Math.min(drops, Math.round((waterMl / targetMl) * drops)) : 0;
+    container.innerHTML = Array.from({ length: drops }, (_, index) => `
+      <span class="${index < filled ? 'is-filled' : ''}"><i data-lucide="droplet"></i></span>
+    `).join('');
+  }
+
+  function renderTrendSummary() {
+    if (!$('trend-avg-calories')) return;
+    const range = Number($('trend-range').value || 7);
+    const dates = lastNDates(range, currentDate);
+    const calories = dates.map((date) => totalsForDate(date).calories);
+    const loggedDays = calories.filter((value) => value > 0).length;
+    const avgCalories = loggedDays ? calories.reduce((sum, value) => sum + value, 0) / loggedDays : 0;
+    const waters = dates.map((date) => numberValue((state.water.find((item) => item.date === date) || {}).ml, 0));
+    const waterDays = waters.filter((value) => value > 0).length;
+    const avgWater = waterDays ? waters.reduce((sum, value) => sum + value, 0) / waterDays : 0;
+    const weights = [...state.weights]
+      .filter((item) => item.date >= dates[0] && item.date <= currentDate)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const weightDelta = weights.length >= 2 ? weights[weights.length - 1].weight - weights[0].weight : null;
+
+    $('trend-avg-calories').textContent = Math.round(avgCalories);
+    $('trend-logged-days').textContent = `${loggedDays}/${range}`;
+    $('trend-weight-delta').textContent = weightDelta === null ? '-' : `${weightDelta > 0 ? '+' : ''}${round1(weightDelta)} kg`;
+    $('trend-avg-water').textContent = formatLiters(avgWater);
+  }
+
   function renderSettings() {
     $('target-calories').value = state.settings.calories;
     $('target-protein').value = state.settings.protein;
@@ -2154,6 +2331,7 @@
 
   function renderCharts() {
     renderWeekChart();
+    renderDashboardMacroChart();
     renderCalorieChart();
     renderWeightChart();
     renderMacroChart();
@@ -2167,11 +2345,12 @@
       label: shortDate(date),
       value: totalsForDate(date).calories
     }));
-    drawBarChart(canvas, points, state.settings.calories, {
+    drawAreaLineChart(canvas, points, state.settings.calories, {
       label: 'Kalorie',
       unit: 'kcal',
       color: '#2f7d59',
-      targetColor: '#c75a3b',
+      fillColor: 'rgba(62, 138, 80, 0.14)',
+      targetColor: '#9dbb9b',
       emptyLabel: 'Brak zapisanych kalorii'
     });
   }
@@ -2185,13 +2364,29 @@
       label: range > 14 ? shortDay(date) : shortDate(date),
       value: totalsForDate(date).calories
     }));
-    drawBarChart(canvas, points, state.settings.calories, {
+    drawAreaLineChart(canvas, points, state.settings.calories, {
       label: 'Kalorie',
       unit: 'kcal',
       color: '#2f7d59',
-      targetColor: '#c75a3b',
+      fillColor: 'rgba(62, 138, 80, 0.14)',
+      targetColor: '#9dbb9b',
       emptyLabel: 'Brak zapisanych kalorii'
     });
+  }
+
+  function renderDashboardMacroChart() {
+    const canvas = $('dashboard-macro-chart');
+    if (!isVisible(canvas)) return;
+    const totals = totalsForDate(currentDate);
+    const proteinCalories = totals.protein * 4;
+    const carbCalories = totals.carbs * 4;
+    const fatCalories = totals.fat * 9;
+    drawDonutChart(canvas, [
+      { label: 'Białko', value: proteinCalories, color: '#3e8a50' },
+      { label: 'Węgle', value: carbCalories, color: '#d08a24' },
+      { label: 'Tłuszcz', value: fatCalories, color: '#8f62d7' }
+    ], 'Brak makro');
+    $('dashboard-macro-label').textContent = formatDateLabel(currentDate);
   }
 
   function renderWeightChart() {
@@ -2227,9 +2422,9 @@
     const carbCalories = totals.carbs * 4;
     const fatCalories = totals.fat * 9;
     drawDonutChart(canvas, [
-      { label: 'Białko', value: proteinCalories, color: '#c75a3b' },
-      { label: 'Węglowodany', value: carbCalories, color: '#b8872f' },
-      { label: 'Tłuszcz', value: fatCalories, color: '#1f7a8c' }
+      { label: 'Białko', value: proteinCalories, color: '#3e8a50' },
+      { label: 'Węglowodany', value: carbCalories, color: '#d08a24' },
+      { label: 'Tłuszcz', value: fatCalories, color: '#8f62d7' }
     ], 'Brak makro');
     $('macro-split-label').textContent = formatDateLabel(currentDate);
   }
@@ -2305,6 +2500,113 @@
     });
 
     if (!hasData) drawEmptyLabel(ctx, width, height, options.emptyLabel || 'Brak danych');
+  }
+
+  function drawAreaLineChart(canvas, points, target, options) {
+    const ctx = setupCanvas(canvas);
+    if (!ctx) return;
+    const { width, height } = canvas.__chartSize;
+    clearChart(ctx, width, height);
+    canvas.__chartHitboxes = [];
+    const values = points.map((point) => numberValue(point.value, 0));
+    const hasData = values.some((value) => value > 0);
+    const maxValue = Math.max(target || 0, ...values, 1);
+    const pad = { left: 48, right: 18, top: 36, bottom: 38 };
+    const chartW = width - pad.left - pad.right;
+    const chartH = height - pad.top - pad.bottom;
+
+    drawChartLegend(ctx, width, [
+      { label: options.label || 'Wartość', color: options.color || '#2f7d59' },
+      ...(target ? [{ label: 'Cel', color: options.targetColor || '#9dbb9b', dashed: true }] : [])
+    ]);
+    drawGrid(ctx, pad, chartW, chartH, maxValue);
+
+    if (target) {
+      const y = pad.top + chartH - (target / maxValue) * chartH;
+      ctx.strokeStyle = options.targetColor || '#9dbb9b';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(pad.left, y);
+      ctx.lineTo(pad.left + chartW, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      canvas.__chartHitboxes.push({
+        type: 'rect',
+        x: pad.left,
+        y: y - 6,
+        width: chartW,
+        height: 12,
+        label: 'Cel',
+        value: `${Math.round(target)} ${options.unit || ''}`.trim(),
+        color: options.targetColor || '#9dbb9b'
+      });
+    }
+
+    if (!hasData) {
+      drawEmptyLabel(ctx, width, height, options.emptyLabel || 'Brak danych');
+      return;
+    }
+
+    const xFor = (index) => pad.left + (index / Math.max(1, points.length - 1)) * chartW;
+    const yFor = (value) => pad.top + chartH - (value / maxValue) * chartH;
+    const coordinates = points.map((point, index) => ({
+      x: xFor(index),
+      y: yFor(numberValue(point.value, 0)),
+      value: numberValue(point.value, 0),
+      label: point.label
+    }));
+
+    const gradient = ctx.createLinearGradient(0, pad.top, 0, pad.top + chartH);
+    gradient.addColorStop(0, options.fillColor || 'rgba(62, 138, 80, 0.16)');
+    gradient.addColorStop(1, 'rgba(62, 138, 80, 0)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    coordinates.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.lineTo(coordinates[coordinates.length - 1].x, pad.top + chartH);
+    ctx.lineTo(coordinates[0].x, pad.top + chartH);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = options.color || '#2f7d59';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    coordinates.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.stroke();
+
+    coordinates.forEach((point, index) => {
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = options.color || '#2f7d59';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      canvas.__chartHitboxes.push({
+        type: 'circle',
+        x: point.x,
+        y: point.y,
+        radius: 13,
+        label: point.label,
+        value: `${Math.round(point.value)} ${options.unit || ''}`.trim(),
+        color: options.color || '#2f7d59'
+      });
+
+      if (points.length <= 14 || index % Math.ceil(points.length / 8) === 0) {
+        ctx.fillStyle = '#65706d';
+        ctx.font = '11px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(point.label, point.x, height - 12);
+      }
+    });
   }
 
   function drawLineChart(canvas, points, options) {
@@ -2632,6 +2934,10 @@
       settings: { ...defaultState.settings, ...((rawState && rawState.settings) || {}) },
       foods: Array.isArray(rawState && rawState.foods) && rawState.foods.length ? rawState.foods : structuredCloneSafe(seedFoods),
       recipes: Array.isArray(rawState && rawState.recipes) && rawState.recipes.length ? rawState.recipes : structuredCloneSafe(seedRecipes),
+      profile: {
+        ...defaultState.profile,
+        ...((rawState && rawState.profile && typeof rawState.profile === 'object' && !Array.isArray(rawState.profile)) ? rawState.profile : {})
+      },
       entries: Array.isArray(rawState && rawState.entries) ? rawState.entries : [],
       weights: Array.isArray(rawState && rawState.weights) ? rawState.weights : [],
       water: Array.isArray(rawState && rawState.water) ? rawState.water : [],
@@ -2950,6 +3256,10 @@
   function round1(value) {
     const rounded = Math.round((Number(value) || 0) * 10) / 10;
     return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+  }
+
+  function formatLiters(ml) {
+    return `${round1(numberValue(ml, 0) / 1000)} L`;
   }
 
   function uid() {

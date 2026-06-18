@@ -28,6 +28,10 @@
 
         <div class="date-switcher" aria-label="Wybrana data dziennika">
           <div class="profile-badge" id="profile-badge" hidden>
+            <span class="profile-avatar-wrap" aria-hidden="true">
+              <img id="profile-avatar" class="profile-avatar" alt="">
+              <span id="profile-avatar-initials" class="profile-avatar-initials">A</span>
+            </span>
             <span>Profil</span>
             <strong id="profile-name">-</strong>
           </div>
@@ -124,31 +128,98 @@
 
       <main id="main-content">
         <section class="view active" id="view-diary">
+          <section class="dashboard-hero">
+            <div>
+              <span class="section-kicker">Dashboard</span>
+              <h2 id="dashboard-title">Dzisiaj</h2>
+              <p id="dashboard-subtitle">Spokojny plan, konkretne liczby i szybkie decyzje.</p>
+            </div>
+            <div class="dashboard-hero-actions">
+              <label class="dashboard-search">
+                <i data-lucide="search"></i>
+                <input id="dashboard-search" type="search" placeholder="Szukaj posiłków, produktów, przepisów...">
+              </label>
+              <button class="primary-button" id="quick-add-meal" type="button">
+                <i data-lucide="plus"></i>
+                Dodaj posiłek
+              </button>
+              <div class="dashboard-profile-card">
+                <img id="dashboard-avatar" class="dashboard-avatar" alt="">
+                <span id="dashboard-avatar-initials" class="dashboard-avatar-initials">A</span>
+                <strong id="dashboard-profile-name">Agnieszka</strong>
+              </div>
+            </div>
+          </section>
+
           <section class="metric-grid" aria-label="Podsumowanie dnia">
-            <article class="metric-card accent-green">
-              <span class="metric-label">Kalorie</span>
-              <strong id="calories-value">0 / 0</strong>
-              <div class="meter"><span id="calories-meter"></span></div>
-              <small id="calories-remaining">pozostało 0</small>
+            <article class="metric-card metric-card-large accent-green">
+              <div class="metric-topline">
+                <span class="metric-icon"><i data-lucide="flame"></i></span>
+                <span class="metric-label">Kalorie dzisiaj</span>
+              </div>
+              <div class="metric-large-body">
+                <div>
+                  <strong id="calories-value">0 / 0</strong>
+                  <small id="calories-remaining">pozostało 0</small>
+                </div>
+                <div class="calorie-ring" id="calorie-ring" style="--progress: 0deg;">
+                  <span id="calorie-ring-value">0%</span>
+                </div>
+              </div>
             </article>
             <article class="metric-card accent-coral">
-              <span class="metric-label">Białko</span>
+              <div class="metric-topline">
+                <span class="metric-icon"><i data-lucide="drumstick"></i></span>
+                <span class="metric-label">Białko</span>
+              </div>
               <strong id="protein-value">0g / 0g</strong>
               <div class="meter"><span id="protein-meter"></span></div>
               <small id="protein-detail">pozostało 0g</small>
             </article>
             <article class="metric-card accent-amber">
-              <span class="metric-label">Węglowodany</span>
+              <div class="metric-topline">
+                <span class="metric-icon"><i data-lucide="wheat"></i></span>
+                <span class="metric-label">Węglowodany</span>
+              </div>
               <strong id="carbs-value">0g / 0g</strong>
               <div class="meter"><span id="carbs-meter"></span></div>
               <small id="carbs-detail">pozostało 0g</small>
             </article>
             <article class="metric-card accent-teal">
-              <span class="metric-label">Tłuszcz</span>
+              <div class="metric-topline">
+                <span class="metric-icon"><i data-lucide="droplet"></i></span>
+                <span class="metric-label">Tłuszcz</span>
+              </div>
               <strong id="fat-value">0g / 0g</strong>
               <div class="meter"><span id="fat-meter"></span></div>
               <small id="fat-detail">pozostało 0g</small>
             </article>
+            <article class="metric-card accent-blue">
+              <div class="metric-topline">
+                <span class="metric-icon"><i data-lucide="glass-water"></i></span>
+                <span class="metric-label">Woda</span>
+              </div>
+              <strong id="water-value">0 L / 0 L</strong>
+              <div class="meter"><span id="water-meter"></span></div>
+              <small id="water-detail">pozostało 0 L</small>
+            </article>
+          </section>
+
+          <section class="dashboard-chart-grid">
+            <div class="panel chart-panel chart-panel-wide">
+              <div class="panel-heading compact-heading">
+                <h2>Trend tygodnia</h2>
+                <span class="stat-chip">7 dni</span>
+              </div>
+              <canvas id="week-chart" width="720" height="280"></canvas>
+            </div>
+            <div class="panel chart-panel">
+              <div class="panel-heading compact-heading">
+                <h2>Balans makro</h2>
+                <span id="dashboard-macro-label" class="stat-chip">Dzisiaj</span>
+              </div>
+              <canvas id="dashboard-macro-chart" width="460" height="280"></canvas>
+            </div>
           </section>
 
           <section class="panel coach-panel" aria-label="Plan dnia">
@@ -291,7 +362,7 @@
                 </button>
               </form>
               <div class="mini-chart-wrap">
-                <canvas id="week-chart" width="480" height="220"></canvas>
+                <div class="water-drops" id="water-drops" aria-label="Woda dzisiaj"></div>
               </div>
             </div>
           </section>
@@ -482,6 +553,32 @@
         </section>
 
         <section class="view" id="view-trends">
+          <section class="trend-hero">
+            <div>
+              <span class="section-kicker">Progress</span>
+              <h2>Trendy i progres</h2>
+              <p>Patrz na kierunek, nie na pojedynczy dzień. Tu widać rytm kalorii, makro, wagi i nawodnienia.</p>
+            </div>
+            <div class="trend-summary-grid" id="trend-summary-grid">
+              <article class="trend-summary-card">
+                <span>Średnia kcal</span>
+                <strong id="trend-avg-calories">0</strong>
+              </article>
+              <article class="trend-summary-card">
+                <span>Dni z wpisami</span>
+                <strong id="trend-logged-days">0/7</strong>
+              </article>
+              <article class="trend-summary-card">
+                <span>Zmiana wagi</span>
+                <strong id="trend-weight-delta">-</strong>
+              </article>
+              <article class="trend-summary-card">
+                <span>Średnia woda</span>
+                <strong id="trend-avg-water">0 L</strong>
+              </article>
+            </div>
+          </section>
+
           <section class="trend-grid">
             <div class="panel">
               <div class="panel-heading">
@@ -591,6 +688,34 @@
                 </div>
               </form>
               <p class="storage-note" id="sync-note"></p>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Profil</h2>
+                <span class="stat-chip">Avatar</span>
+              </div>
+              <div class="avatar-editor">
+                <div class="avatar-preview">
+                  <img id="settings-avatar" alt="">
+                  <span id="settings-avatar-initials">A</span>
+                </div>
+                <div>
+                  <strong id="settings-profile-name">Agnieszka</strong>
+                  <p class="storage-note">Zdjęcie zapisze się w profilu i zsynchronizuje między urządzeniami.</p>
+                  <div class="button-row">
+                    <label class="secondary-button file-button">
+                      <i data-lucide="image-plus"></i>
+                      Dodaj zdjęcie
+                      <input id="avatar-input" type="file" accept="image/png,image/jpeg,image/webp">
+                    </label>
+                    <button class="ghost-button" id="remove-avatar" type="button">
+                      <i data-lucide="x"></i>
+                      Usuń
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="panel">
