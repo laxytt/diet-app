@@ -193,6 +193,7 @@
     $('gate-signup-button').addEventListener('click', signUpUser);
     $('gate-google-button').addEventListener('click', loginWithGoogle);
     $('quick-add-meal').addEventListener('click', focusMealForm);
+    $('plan-snack-button').addEventListener('click', planSnack);
     $('dashboard-search').addEventListener('keydown', handleDashboardSearch);
     ['entry-food', 'entry-grams', 'entry-unit', 'entry-calories', 'entry-protein', 'entry-carbs', 'entry-fat'].forEach((id) => {
       $(id).addEventListener('input', updateEntryPreview);
@@ -262,6 +263,7 @@
     renderSummary();
     renderProfileVisuals();
     renderDailyCoach();
+    renderDashboardInsights();
     renderDatalist();
     renderDiary();
     renderBodyInputs();
@@ -450,6 +452,7 @@
     if (appShell) appShell.classList.toggle('auth-loading', Boolean(supabaseClient && isAuthInitializing));
     if (authGate) authGate.hidden = !locked;
     if (locked && todaySummary) todaySummary.textContent = 'Zaloguj się, żeby zobaczyć dane profilu';
+    if (!locked) window.requestAnimationFrame(renderCharts);
 
     if (!supabaseClient) {
       syncStatus.textContent = 'Lokalnie';
@@ -1186,15 +1189,22 @@
   function renderDiary() {
     const entries = entriesForDate(currentDate);
     const html = MEALS.map((meal) => {
+      const meta = mealMeta(meal);
       const mealEntries = entries.filter((entry) => entry.meal === meal);
       const totals = sumEntries(mealEntries);
       const rows = mealEntries.length
         ? mealEntries.map(renderDiaryRow).join('')
-        : '<div class="empty-state">Brak wpisów</div>';
+        : '<div class="empty-state meal-empty">Brak wpisów</div>';
       return `
-        <section class="meal-section">
+        <section class="meal-section meal-${meal.toLowerCase()}">
           <div class="meal-title">
-            <span>${mealLabel(meal)}</span>
+            <span class="meal-title-main">
+              <i data-lucide="${meta.icon}"></i>
+              <span>
+                <strong>${mealLabel(meal)}</strong>
+                <em>${meta.time}</em>
+              </span>
+            </span>
             <small>${Math.round(totals.calories)} kcal · ${round1(totals.protein)}b / ${round1(totals.carbs)}w / ${round1(totals.fat)}t</small>
           </div>
           ${rows}
@@ -1221,6 +1231,15 @@
         </button>
       </div>
     `;
+  }
+
+  function mealMeta(meal) {
+    return {
+      Breakfast: { icon: 'sunrise', time: '8:00' },
+      Lunch: { icon: 'sun', time: '12:30' },
+      Dinner: { icon: 'moon', time: '19:00' },
+      Snack: { icon: 'apple', time: '15:30' }
+    }[meal] || { icon: 'utensils', time: '' };
   }
 
   function updateEntryPreview() {
@@ -1959,6 +1978,14 @@
     }
   }
 
+  function planSnack() {
+    $('entry-meal').value = 'Snack';
+    $('entry-food').value = '';
+    $('entry-grams').value = '1';
+    $('entry-unit').value = 'porcja';
+    focusMealForm();
+  }
+
   function handleDashboardSearch(event) {
     if (event.key !== 'Enter') return;
     event.preventDefault();
@@ -1977,6 +2004,38 @@
     container.innerHTML = Array.from({ length: drops }, (_, index) => `
       <span class="${index < filled ? 'is-filled' : ''}"><i data-lucide="droplet"></i></span>
     `).join('');
+  }
+
+  function renderDashboardInsights() {
+    const streak = habitStreak(currentDate);
+    const weekDates = lastNDates(7, currentDate);
+    const lastWeight = latestWeightBefore(currentDate);
+    const previousWeight = previousWeightBefore(lastWeight && lastWeight.date);
+    const coach = getDailyCoach(currentDate, false);
+
+    $('habit-streak-value').textContent = `${streak} ${streak === 1 ? 'dzień' : 'dni'}`;
+    $('habit-streak-note').textContent = streak > 0
+      ? 'Trzymaj rytm. Jeden wpis dziennie robi dużą różnicę.'
+      : 'Dodaj pierwszy wpis, żeby zacząć serię.';
+    $('habit-week').innerHTML = weekDates.map((date) => {
+      const active = totalsForDate(date).calories > 0;
+      return `<span class="${active ? 'is-active' : ''}" title="${escapeHTML(formatDateLabel(date))}">${shortWeekday(date)}</span>`;
+    }).join('');
+
+    if (lastWeight) {
+      const delta = previousWeight ? lastWeight.weight - previousWeight.weight : null;
+      $('dashboard-weight-value').textContent = `${round1(lastWeight.weight)} kg`;
+      $('dashboard-weight-note').textContent = delta === null
+        ? `Ostatni pomiar: ${shortDate(lastWeight.date)}.`
+        : `${delta > 0 ? '+' : ''}${round1(delta)} kg od poprzedniego pomiaru.`;
+    } else {
+      $('dashboard-weight-value').textContent = '-';
+      $('dashboard-weight-note').textContent = 'Brak pomiaru w wybranym zakresie.';
+    }
+
+    $('dashboard-recommendation').textContent = (coach.suggestions && coach.suggestions[0])
+      ? coach.suggestions[0]
+      : 'Zaplanuj prostą przekąskę białkową na później.';
   }
 
   function renderTrendSummary() {
@@ -1998,6 +2057,34 @@
     $('trend-logged-days').textContent = `${loggedDays}/${range}`;
     $('trend-weight-delta').textContent = weightDelta === null ? '-' : `${weightDelta > 0 ? '+' : ''}${round1(weightDelta)} kg`;
     $('trend-avg-water').textContent = formatLiters(avgWater);
+  }
+
+  function habitStreak(endDate) {
+    let streak = 0;
+    let cursor = endDate;
+    while (streak < 365) {
+      if (totalsForDate(cursor).calories <= 0) break;
+      streak += 1;
+      cursor = addDays(cursor, -1);
+    }
+    return streak;
+  }
+
+  function latestWeightBefore(date) {
+    return [...state.weights]
+      .filter((item) => item.date <= date)
+      .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+  }
+
+  function previousWeightBefore(date) {
+    if (!date) return null;
+    return [...state.weights]
+      .filter((item) => item.date < date)
+      .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+  }
+
+  function shortWeekday(isoDate) {
+    return parseLocalDate(isoDate).toLocaleDateString('pl-PL', { weekday: 'short' }).slice(0, 2);
   }
 
   function renderSettings() {
@@ -2335,6 +2422,7 @@
     renderCalorieChart();
     renderWeightChart();
     renderMacroChart();
+    renderWaterChart();
   }
 
   function renderWeekChart() {
@@ -2427,6 +2515,28 @@
       { label: 'Tłuszcz', value: fatCalories, color: '#8f62d7' }
     ], 'Brak makro');
     $('macro-split-label').textContent = formatDateLabel(currentDate);
+  }
+
+  function renderWaterChart() {
+    const canvas = $('water-chart');
+    if (!isVisible(canvas)) return;
+    const range = Number($('trend-range').value || 7);
+    const dates = lastNDates(range, currentDate);
+    const points = dates.map((date) => ({
+      label: range > 14 ? shortDay(date) : shortDate(date),
+      value: numberValue((state.water.find((item) => item.date === date) || {}).ml, 0) / 1000
+    }));
+    const values = points.map((point) => point.value).filter((value) => value > 0);
+    $('water-trend-label').textContent = values.length
+      ? `Śr. ${round1(values.reduce((sum, value) => sum + value, 0) / values.length)} L`
+      : 'Brak danych';
+    drawBarChart(canvas, points, state.settings.water / 1000, {
+      label: 'Woda',
+      unit: 'L',
+      color: '#4f9de8',
+      targetColor: '#9dc8ed',
+      emptyLabel: 'Brak zapisanej wody'
+    });
   }
 
   function drawBarChart(canvas, points, target, options) {

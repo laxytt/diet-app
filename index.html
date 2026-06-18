@@ -222,6 +222,37 @@
             </div>
           </section>
 
+          <section class="dashboard-insight-grid" aria-label="Szybkie insighty">
+            <article class="insight-card">
+              <div class="insight-heading">
+                <span class="insight-icon fire"><i data-lucide="flame"></i></span>
+                <span>Seria nawyku</span>
+              </div>
+              <strong id="habit-streak-value">0 dni</strong>
+              <p id="habit-streak-note">Dodaj pierwszy wpis, żeby zacząć serię.</p>
+              <div class="habit-week" id="habit-week"></div>
+            </article>
+            <article class="insight-card">
+              <div class="insight-heading">
+                <span class="insight-icon scale"><i data-lucide="scale"></i></span>
+                <span>Waga</span>
+              </div>
+              <strong id="dashboard-weight-value">-</strong>
+              <p id="dashboard-weight-note">Brak pomiaru w wybranym zakresie.</p>
+            </article>
+            <article class="insight-card recommendation-card">
+              <div class="insight-heading">
+                <span class="insight-icon sparkle"><i data-lucide="sparkles"></i></span>
+                <span>Rekomendacja</span>
+              </div>
+              <p id="dashboard-recommendation">Zaplanuj prostą przekąskę białkową na później.</p>
+              <button class="secondary-button compact" id="plan-snack-button" type="button">
+                <i data-lucide="plus"></i>
+                Zaplanuj przekąskę
+              </button>
+            </article>
+          </section>
+
           <section class="panel coach-panel" aria-label="Plan dnia">
             <div class="coach-media">
               <img src="assets/healthy-food-hero.jpg" alt="Zdrowy posiłek z kurczakiem, warzywami, owocami i wodą">
@@ -605,6 +636,13 @@
                 <span id="macro-split-label" class="stat-chip">Dzisiaj</span>
               </div>
               <canvas id="macro-chart" width="520" height="300"></canvas>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Nawodnienie</h2>
+                <span id="water-trend-label" class="stat-chip">Brak danych</span>
+              </div>
+              <canvas id="water-chart" width="900" height="320"></canvas>
             </div>
           </section>
         </section>

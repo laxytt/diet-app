@@ -1,4 +1,4 @@
-const CACHE_NAME = 'diet-studio-v11';
+const CACHE_NAME = 'diet-studio-v12';
 const ASSETS = [
   './',
   './index.html',
