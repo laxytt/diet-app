@@ -2747,6 +2747,120 @@ th {
   height: 18px;
 }
 
+.forecast-note {
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+  color: var(--muted);
+  padding: 9px;
+  font-size: 0.84rem;
+}
+
+.activity-log-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.activity-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.activity-list {
+  display: grid;
+  gap: 8px;
+}
+
+.activity-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.84);
+  padding: 9px;
+}
+
+.activity-item strong,
+.activity-item span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity-item span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.product-scan-panel {
+  margin-bottom: 12px;
+}
+
+.barcode-tools {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  align-items: end;
+}
+
+.barcode-result {
+  margin-top: 12px;
+}
+
+.barcode-card {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 12px;
+}
+
+.barcode-card img,
+.barcode-placeholder {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius);
+  object-fit: cover;
+  background: var(--green-soft);
+}
+
+.barcode-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--green);
+}
+
+.barcode-card strong,
+.barcode-card span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.barcode-card > div {
+  min-width: 0;
+}
+
+.body-forecast-panel {
+  margin-bottom: 12px;
+}
+
+@media (min-width: 760px) {
+  .barcode-tools {
+    grid-template-columns: minmax(240px, 1fr) auto auto;
+  }
+}
+
 @media (min-width: 720px) {
   .quick-entry-form {
     grid-template-columns: minmax(0, 1fr) 120px auto;

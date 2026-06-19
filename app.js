@@ -109,7 +109,11 @@
       protein: 160,
       carbs: 230,
       fat: 70,
-      water: 2500
+      water: 2500,
+      heightCm: 0,
+      age: 35,
+      sex: 'female',
+      activityLevel: 'light'
     },
     foods: seedFoods,
     recipes: seedRecipes,
@@ -120,6 +124,7 @@
     entries: [],
     weights: [],
     water: [],
+    activities: [],
     dailyCoach: {},
     deletedEntryIds: [],
     mealTemplates: [],
@@ -145,6 +150,7 @@
   let manualMode = true;
   let importState = null;
   let aiDraft = null;
+  let scannedProduct = null;
   let chartTimer = 0;
   let chartTooltip = null;
   let remoteSaveTimer = 0;
@@ -283,8 +289,13 @@
 
     $('copy-yesterday').addEventListener('click', copyYesterday);
     $('body-form').addEventListener('submit', saveBodyLog);
+    $('activity-form').addEventListener('submit', saveActivity);
+    $('activity-list').addEventListener('click', handleActivityAction);
 
     $('food-search').addEventListener('input', renderFoods);
+    $('barcode-lookup').addEventListener('click', lookupBarcodeFromInput);
+    $('barcode-file').addEventListener('change', scanBarcodeFile);
+    $('barcode-result').addEventListener('click', handleBarcodeResultAction);
     $('food-form').addEventListener('submit', saveFood);
     $('reset-food-form').addEventListener('click', resetFoodForm);
     $('food-list').addEventListener('click', handleFoodAction);
@@ -333,6 +344,7 @@
     renderProfileVisuals();
     renderDailyCoach();
     renderDashboardInsights();
+    renderBodyForecast();
     renderHabitGoalProgress();
     renderDashboardMeals();
     renderDatalist();
@@ -341,7 +353,9 @@
     renderQuickTools();
     renderPlannedMeals();
     renderBodyInputs();
+    renderActivities();
     renderFoods();
+    renderBarcodeResult();
     renderRecipes();
     renderShoppingList();
     renderSettings();
@@ -350,6 +364,7 @@
     renderAIResult();
     renderTrendSummary();
     renderWeeklyReview();
+    renderForecastPanel();
     updateSyncUI();
     updateEntryPreview();
     renderCharts();
@@ -1020,6 +1035,7 @@
       entries: mergeEntries(base.entries, incoming.entries, deletedEntryIds),
       weights: mergeByDate(base.weights, incoming.weights),
       water: mergeByDate(base.water, incoming.water),
+      activities: mergeById(base.activities, incoming.activities),
       dailyCoach: { ...base.dailyCoach, ...incoming.dailyCoach },
       deletedEntryIds,
       mealTemplates: mergeById(base.mealTemplates, incoming.mealTemplates),
@@ -1735,6 +1751,232 @@
     toast('Pomiary zapisane.');
   }
 
+  function saveActivity(event) {
+    event.preventDefault();
+    const type = $('activity-type').value || 'other';
+    const minutes = numberValue($('activity-minutes').value, 0);
+    const intensity = $('activity-intensity').value || 'moderate';
+    const manualCalories = numberValue($('activity-calories').value, null);
+    if (minutes <= 0 && manualCalories === null) {
+      toast('Podaj czas aktywnosci albo spalone kcal.');
+      return;
+    }
+
+    const calories = manualCalories !== null
+      ? manualCalories
+      : estimateActivityCalories(type, intensity, minutes);
+    state.activities.push({
+      id: uid(),
+      date: currentDate,
+      type,
+      intensity,
+      minutes,
+      calories: Math.max(0, Math.round(calories)),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    $('activity-minutes').value = '';
+    $('activity-calories').value = '';
+    saveState();
+    render();
+    toast('Aktywnosc zapisana.');
+  }
+
+  function handleActivityAction(event) {
+    const remove = event.target.closest('[data-delete-activity]');
+    if (!remove) return;
+    state.activities = state.activities.filter((activity) => activity.id !== remove.dataset.deleteActivity);
+    saveState();
+    render();
+    toast('Aktywnosc usunieta.');
+  }
+
+  function renderActivities() {
+    const list = $('activity-list');
+    if (!list) return;
+    const activities = activitiesForDate(currentDate);
+    const total = sumActivities(activities);
+    $('activity-today-total').textContent = `${Math.round(total)} kcal`;
+    list.innerHTML = activities.length
+      ? activities.map((activity) => `
+        <article class="activity-item">
+          <div>
+            <strong>${activityLabel(activity.type)}</strong>
+            <span>${activity.minutes ? `${Math.round(activity.minutes)} min · ` : ''}${intensityLabel(activity.intensity)} · ${Math.round(activity.calories)} kcal</span>
+          </div>
+          <button class="icon-button" type="button" data-delete-activity="${activity.id}" aria-label="Usun aktywnosc" title="Usun">
+            <i data-lucide="x"></i>
+          </button>
+        </article>
+      `).join('')
+      : '<div class="empty-state">Brak zapisanej aktywnosci dzisiaj.</div>';
+  }
+
+  function activitiesForDate(date) {
+    return (state.activities || []).filter((activity) => activity.date === date);
+  }
+
+  function sumActivities(activities) {
+    return (activities || []).reduce((sum, activity) => sum + numberValue(activity.calories, 0), 0);
+  }
+
+  function estimateActivityCalories(type, intensity, minutes) {
+    const weight = numberValue((latestWeightBefore(currentDate) || {}).weight, 70);
+    const met = activityMet(type, intensity);
+    return (met * 3.5 * weight / 200) * numberValue(minutes, 0);
+  }
+
+  function activityMet(type, intensity) {
+    const base = {
+      walk: 3.5,
+      run: 8.3,
+      cycling: 7,
+      gym: 5,
+      swim: 6,
+      other: 4
+    }[type] || 4;
+    const factor = {
+      easy: 0.78,
+      moderate: 1,
+      hard: 1.28
+    }[intensity] || 1;
+    return base * factor;
+  }
+
+  function activityLabel(type) {
+    return {
+      walk: 'Spacer',
+      run: 'Bieg',
+      cycling: 'Rower',
+      gym: 'Silownia',
+      swim: 'Plywanie',
+      other: 'Inne'
+    }[type] || 'Aktywnosc';
+  }
+
+  function intensityLabel(intensity) {
+    return {
+      easy: 'lekka',
+      moderate: 'srednia',
+      hard: 'mocna'
+    }[intensity] || 'srednia';
+  }
+
+  function bodyStats() {
+    const weight = latestWeightBefore(currentDate);
+    const weightKg = numberValue(weight && weight.weight, 0);
+    const heightCm = numberValue(state.settings.heightCm, 0);
+    const age = numberValue(state.settings.age, 35);
+    const sex = state.settings.sex === 'male' ? 'male' : 'female';
+    const bmi = weightKg > 0 && heightCm > 0 ? weightKg / ((heightCm / 100) ** 2) : 0;
+    const bmr = weightKg > 0 && heightCm > 0
+      ? (10 * weightKg) + (6.25 * heightCm) - (5 * age) + (sex === 'male' ? 5 : -161)
+      : 0;
+    const multiplier = activityMultiplier(state.settings.activityLevel);
+    const tdee = bmr > 0 ? bmr * multiplier : 0;
+    const forecast = forecastForDays(30, tdee);
+    return { weight, weightKg, heightCm, age, sex, bmi, bmr, tdee, forecast };
+  }
+
+  function activityMultiplier(level) {
+    return {
+      sedentary: 1.2,
+      light: 1.375,
+      moderate: 1.55,
+      active: 1.725,
+      very_active: 1.9
+    }[level] || 1.375;
+  }
+
+  function forecastForDays(days, tdee) {
+    const range = Math.min(14, days);
+    const dates = lastNDates(range, currentDate);
+    const logged = dates
+      .map((date) => ({ date, calories: totalsForDate(date).calories, activity: sumActivities(activitiesForDate(date)) }))
+      .filter((day) => day.calories > 0);
+    const avgCalories = logged.length
+      ? logged.reduce((sum, day) => sum + day.calories, 0) / logged.length
+      : 0;
+    const avgActivity = logged.length
+      ? logged.reduce((sum, day) => sum + day.activity, 0) / logged.length
+      : 0;
+    const dailyDeficit = tdee > 0 && avgCalories > 0 ? (tdee + avgActivity) - avgCalories : 0;
+    const totalDeficit = dailyDeficit * days;
+    const weightChangeKg = totalDeficit / 7700;
+    return {
+      days,
+      sampleDays: logged.length,
+      avgCalories,
+      avgActivity,
+      dailyDeficit,
+      totalDeficit,
+      weightChangeKg
+    };
+  }
+
+  function bmiLabel(bmi) {
+    if (!bmi) return 'Brak danych';
+    if (bmi < 18.5) return 'ponizej normy';
+    if (bmi < 25) return 'w normie';
+    if (bmi < 30) return 'nadwaga';
+    return 'otylosc';
+  }
+
+  function renderBodyForecast() {
+    const stats = bodyStats();
+    const bmiValue = $('dashboard-bmi-value');
+    const bmiNote = $('dashboard-bmi-note');
+    const forecastNote = $('dashboard-forecast-note');
+    if (!bmiValue || !bmiNote || !forecastNote) return;
+
+    if (!stats.bmi) {
+      bmiValue.textContent = '-';
+      bmiNote.textContent = 'Dodaj wzrost i wage, zeby policzyc BMI.';
+    } else {
+      bmiValue.textContent = `${round1(stats.bmi)} BMI`;
+      bmiNote.textContent = `${bmiLabel(stats.bmi)} · TDEE ok. ${Math.round(stats.tdee)} kcal/dzien`;
+    }
+
+    if (!stats.forecast.sampleDays || !stats.tdee) {
+      forecastNote.textContent = 'Prognoza pojawi sie po wadze, wzroscie i wpisach kalorii.';
+      return;
+    }
+
+    const sign = stats.forecast.totalDeficit >= 0 ? 'deficyt' : 'nadwyzka';
+    forecastNote.textContent = `30 dni: ${sign} ok. ${Math.abs(Math.round(stats.forecast.totalDeficit))} kcal, czyli ok. ${Math.abs(round1(stats.forecast.weightChangeKg))} kg.`;
+  }
+
+  function renderForecastPanel() {
+    const grid = $('forecast-grid');
+    const note = $('forecast-note');
+    if (!grid || !note) return;
+    const stats = bodyStats();
+    const forecast = stats.forecast;
+    grid.innerHTML = [
+      { label: 'BMI', value: stats.bmi ? round1(stats.bmi) : '-', detail: bmiLabel(stats.bmi) },
+      { label: 'BMR', value: stats.bmr ? `${Math.round(stats.bmr)} kcal` : '-', detail: 'Spoczynkowo' },
+      { label: 'TDEE', value: stats.tdee ? `${Math.round(stats.tdee)} kcal` : '-', detail: 'Z bazowa aktywnoscia' },
+      { label: 'Srednia dieta', value: forecast.avgCalories ? `${Math.round(forecast.avgCalories)} kcal` : '-', detail: `${forecast.sampleDays}/14 dni z wpisami` },
+      { label: 'Srednia aktywnosc', value: forecast.avgActivity ? `${Math.round(forecast.avgActivity)} kcal` : '0 kcal', detail: 'Z wpisow aktywnosci' },
+      { label: 'Prognoza 30 dni', value: forecast.totalDeficit ? `${Math.abs(Math.round(forecast.totalDeficit))} kcal` : '-', detail: forecast.totalDeficit >= 0 ? 'Szacowany deficyt' : 'Szacowana nadwyzka' }
+    ].map((card) => `
+      <article class="weekly-review-card">
+        <span>${card.label}</span>
+        <strong>${card.value}</strong>
+        <small>${card.detail}</small>
+      </article>
+    `).join('');
+
+    if (!stats.tdee || !forecast.sampleDays) {
+      note.textContent = 'To szacunek. Dodaj wzrost, wage i kilka dni wpisow, zeby prognoza miala sens.';
+      return;
+    }
+
+    const direction = forecast.totalDeficit >= 0 ? 'redukcji' : 'przyrostu';
+    note.textContent = `Przy obecnym tempie wychodzi ok. ${Math.abs(round1(forecast.weightChangeKg))} kg ${direction} w 30 dni. Traktuj to jako prognoze, nie obietnice.`;
+  }
+
   function copyYesterday() {
     const yesterday = addDays(currentDate, -1);
     const source = entriesForDate(yesterday);
@@ -2395,6 +2637,157 @@
       render();
       toast('Produkt usunięty.');
     }
+  }
+
+  async function lookupBarcodeFromInput() {
+    const code = normalizeBarcode($('barcode-input').value);
+    if (!code) {
+      toast('Podaj kod kreskowy.');
+      return;
+    }
+    await lookupBarcode(code);
+  }
+
+  async function scanBarcodeFile(event) {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!('BarcodeDetector' in window)) {
+      toast('Ta przegladarka nie wspiera skanowania kodow ze zdjecia. Wpisz kod recznie.');
+      return;
+    }
+
+    try {
+      const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] });
+      const bitmap = await createImageBitmap(file);
+      const codes = await detector.detect(bitmap);
+      if (bitmap.close) bitmap.close();
+      const code = normalizeBarcode(codes && codes[0] && codes[0].rawValue);
+      if (!code) {
+        toast('Nie udalo sie odczytac kodu z tego zdjecia.');
+        return;
+      }
+      $('barcode-input').value = code;
+      await lookupBarcode(code);
+    } catch (error) {
+      console.error(error);
+      toast(`Skanowanie kodu nie powiodlo sie: ${error.message}`);
+    }
+  }
+
+  async function lookupBarcode(code) {
+    const button = $('barcode-lookup');
+    if (button) button.disabled = true;
+    scannedProduct = null;
+    renderBarcodeResult('loading');
+    try {
+      const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=code,product_name,brands,quantity,serving_size,nutriments,image_front_small_url`;
+      const response = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!response.ok) throw new Error(`Open Food Facts zwrocil ${response.status}.`);
+      const data = await response.json();
+      if (!data || data.status !== 1 || !data.product) {
+        renderBarcodeResult('empty');
+        toast('Nie znaleziono produktu dla tego kodu.');
+        return;
+      }
+      scannedProduct = productFromOpenFoodFacts(data.product, code);
+      renderBarcodeResult();
+    } catch (error) {
+      console.error(error);
+      renderBarcodeResult('error', error.message);
+      toast('Nie udalo sie pobrac produktu.');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  function productFromOpenFoodFacts(product, code) {
+    const nutriments = product.nutriments || {};
+    const name = String(product.product_name || product.brands || `Produkt ${code}`).trim();
+    return {
+      code,
+      name,
+      brand: String(product.brands || '').trim(),
+      quantity: String(product.quantity || product.serving_size || '').trim(),
+      image: product.image_front_small_url || '',
+      servingGram: 100,
+      servingUnit: 'g',
+      calories: numberValue(nutriments['energy-kcal_100g'], numberValue(nutriments.energy_kcal_100g, 0)),
+      protein: numberValue(nutriments.proteins_100g, 0),
+      carbs: numberValue(nutriments.carbohydrates_100g, 0),
+      fat: numberValue(nutriments.fat_100g, 0),
+      fiber: numberValue(nutriments.fiber_100g, 0)
+    };
+  }
+
+  function renderBarcodeResult(status = '', message = '') {
+    const target = $('barcode-result');
+    if (!target) return;
+    if (status === 'loading') {
+      target.innerHTML = '<div class="empty-state">Szukam produktu...</div>';
+      return;
+    }
+    if (status === 'empty') {
+      target.innerHTML = '<div class="empty-state">Nie znaleziono produktu. Mozesz dodac go recznie jako wlasny produkt.</div>';
+      return;
+    }
+    if (status === 'error') {
+      target.innerHTML = `<div class="empty-state">Blad pobierania: ${escapeHTML(message || 'sprobuj ponownie')}</div>`;
+      return;
+    }
+    if (!scannedProduct) {
+      target.innerHTML = '';
+      return;
+    }
+    target.innerHTML = `
+      <article class="barcode-card">
+        ${scannedProduct.image ? `<img src="${escapeHTML(scannedProduct.image)}" alt="">` : '<div class="barcode-placeholder"><i data-lucide="package-search"></i></div>'}
+        <div>
+          <strong>${escapeHTML(scannedProduct.name)}</strong>
+          <span>${escapeHTML([scannedProduct.brand, scannedProduct.quantity, scannedProduct.code].filter(Boolean).join(' · '))}</span>
+          <div class="recipe-meta">
+            <span>${Math.round(scannedProduct.calories)} kcal / 100 g</span>
+            <span>${round1(scannedProduct.protein)} g bialka</span>
+            <span>${round1(scannedProduct.carbs)} g wegli</span>
+            <span>${round1(scannedProduct.fat)} g tluszczu</span>
+          </div>
+          <p class="storage-note">Dane z Open Food Facts moga byc niepelne. Sprawdz etykiete, jesli cos wyglada dziwnie.</p>
+          <button class="primary-button compact" type="button" data-save-scanned-food>
+            <i data-lucide="save"></i>
+            Dodaj do bazy produktow
+          </button>
+        </div>
+      </article>
+    `;
+    refreshIcons();
+  }
+
+  function handleBarcodeResultAction(event) {
+    if (!event.target.closest('[data-save-scanned-food]') || !scannedProduct) return;
+    const existing = findFoodByName(scannedProduct.name);
+    const food = {
+      id: existing ? existing.id : uid(),
+      name: scannedProduct.name,
+      servingGram: 100,
+      servingUnit: 'g',
+      calories: scannedProduct.calories,
+      protein: scannedProduct.protein,
+      carbs: scannedProduct.carbs,
+      fat: scannedProduct.fat,
+      fiber: scannedProduct.fiber,
+      barcode: scannedProduct.code,
+      custom: true,
+      favorite: Boolean(existing && existing.favorite)
+    };
+    if (existing) Object.assign(existing, food);
+    else state.foods.push(food);
+    saveState();
+    render();
+    toast('Produkt z kodu dodany do bazy.');
+  }
+
+  function normalizeBarcode(value) {
+    return String(value || '').replace(/[^0-9]/g, '').trim();
   }
 
   function renderRecipes() {
@@ -3069,6 +3462,10 @@
   function saveSettings(event) {
     event.preventDefault();
     state.settings = {
+      heightCm: numberValue($('profile-height').value, 0),
+      age: numberValue($('profile-age').value, 35),
+      sex: $('profile-sex').value === 'male' ? 'male' : 'female',
+      activityLevel: $('profile-activity-level').value || 'light',
       calories: numberValue($('target-calories').value, 2200),
       protein: numberValue($('target-protein').value, 160),
       carbs: numberValue($('target-carbs').value, 230),
@@ -3081,6 +3478,10 @@
   }
 
   function renderSettings() {
+    $('profile-height').value = state.settings.heightCm || '';
+    $('profile-age').value = state.settings.age || '';
+    $('profile-sex').value = state.settings.sex === 'male' ? 'male' : 'female';
+    $('profile-activity-level').value = state.settings.activityLevel || 'light';
     $('target-calories').value = state.settings.calories;
     $('target-protein').value = state.settings.protein;
     $('target-carbs').value = state.settings.carbs;
@@ -4219,6 +4620,7 @@
       entries: Array.isArray(rawState && rawState.entries) ? rawState.entries : [],
       weights: Array.isArray(rawState && rawState.weights) ? rawState.weights : [],
       water: Array.isArray(rawState && rawState.water) ? rawState.water : [],
+      activities: Array.isArray(rawState && rawState.activities) ? rawState.activities : [],
       dailyCoach: rawState && rawState.dailyCoach && typeof rawState.dailyCoach === 'object' && !Array.isArray(rawState.dailyCoach)
         ? rawState.dailyCoach
         : {},
