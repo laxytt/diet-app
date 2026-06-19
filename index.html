@@ -118,6 +118,10 @@
           <i data-lucide="notebook-tabs"></i>
           <span>Dziennik</span>
         </button>
+        <button class="tab-button" type="button" data-view="plan">
+          <i data-lucide="calendar-check"></i>
+          <span>Plan</span>
+        </button>
         <button class="tab-button" type="button" data-view="foods">
           <i data-lucide="database"></i>
           <span>Produkty</span>
@@ -265,6 +269,13 @@
                 Zaplanuj przekąskę
               </button>
             </article>
+            <article class="insight-card habit-goals-card">
+              <div class="insight-heading">
+                <span class="insight-icon scale"><i data-lucide="badge-check"></i></span>
+                <span>Cele tygodniowe</span>
+              </div>
+              <div id="habit-goal-progress" class="habit-goal-progress"></div>
+            </article>
           </section>
 
           <section class="panel dashboard-meals-panel">
@@ -314,6 +325,21 @@
                   <i data-lucide="pencil-line"></i>
                 </button>
               </div>
+
+              <form id="quick-entry-form" class="quick-entry-form">
+                <label>
+                  <span>Szybki wpis</span>
+                  <input id="quick-entry-name" placeholder="Nazwa posiłku">
+                </label>
+                <label>
+                  <span>Kcal</span>
+                  <input id="quick-entry-calories" type="number" min="0" step="1" placeholder="np. 320">
+                </label>
+                <button class="secondary-button" type="submit">
+                  <i data-lucide="zap"></i>
+                  Dodaj szybko
+                </button>
+              </form>
 
               <form id="entry-form" class="entry-form">
                 <label>
@@ -378,6 +404,9 @@
                   <i data-lucide="plus"></i>
                   Dodaj do dziennika
                 </button>
+                <button class="ghost-button wide" type="button" id="reset-entry-form">
+                  Wyczyść formularz
+                </button>
               </form>
 
               <div class="ai-meal-panel">
@@ -399,10 +428,16 @@
             <div class="panel diary-panel">
               <div class="panel-heading">
                 <h2>Dziennik dnia</h2>
-                <button class="ghost-button compact" type="button" id="copy-yesterday">
-                  <i data-lucide="copy"></i>
-                  Kopiuj wczoraj
-                </button>
+                <div class="button-row">
+                  <button class="ghost-button compact" type="button" id="copy-yesterday">
+                    <i data-lucide="copy"></i>
+                    Kopiuj wczoraj
+                  </button>
+                  <button class="ghost-button compact" type="button" id="undo-last-action">
+                    <i data-lucide="undo-2"></i>
+                    Cofnij
+                  </button>
+                </div>
               </div>
               <div id="meal-groups" class="meal-groups"></div>
             </div>
@@ -434,6 +469,102 @@
               <div class="mini-chart-wrap">
                 <div class="water-drops" id="water-drops" aria-label="Woda dzisiaj"></div>
               </div>
+            </div>
+          </section>
+
+          <section class="quick-tools-grid">
+            <div class="panel quick-tool-panel">
+              <div class="panel-heading compact-heading">
+                <h2>Ostatnie posiłki</h2>
+                <span class="stat-chip">7 dni</span>
+              </div>
+              <div id="recent-meals-list" class="quick-list"></div>
+            </div>
+            <div class="panel quick-tool-panel">
+              <div class="panel-heading compact-heading">
+                <h2>Ulubione zestawy</h2>
+                <span class="stat-chip">Szablony</span>
+              </div>
+              <div id="meal-template-list" class="quick-list"></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-plan">
+          <section class="logging-hero">
+            <div>
+              <span class="section-kicker">Plan</span>
+              <h2>Plan dnia</h2>
+              <p>Zaplanuj posiłki na dziś lub jutro, a potem jednym kliknięciem przenieś je do dziennika.</p>
+            </div>
+            <button class="primary-button" type="button" id="plan-tomorrow-button">
+              <i data-lucide="calendar-plus"></i>
+              Zaplanuj jutro
+            </button>
+          </section>
+
+          <section class="workspace-grid plan-layout">
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Dodaj do planu</h2>
+                <span class="stat-chip">Produkt / przepis / notatka</span>
+              </div>
+              <form id="planned-meal-form" class="settings-form">
+                <input type="hidden" id="planned-meal-id">
+                <label>
+                  <span>Data</span>
+                  <input id="planned-meal-date" type="date">
+                </label>
+                <label>
+                  <span>Posiłek</span>
+                  <select id="planned-meal-meal">
+                    <option value="Breakfast">Śniadanie</option>
+                    <option value="Lunch">Lunch</option>
+                    <option value="Dinner">Obiad</option>
+                    <option value="Snack">Przekąska</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Typ</span>
+                  <select id="planned-meal-type">
+                    <option value="note">Notatka</option>
+                    <option value="food">Produkt</option>
+                    <option value="recipe">Przepis</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Nazwa</span>
+                  <input id="planned-meal-title" list="plan-options" placeholder="Np. skyr z owocami">
+                  <datalist id="plan-options"></datalist>
+                </label>
+                <label>
+                  <span>Kalorie</span>
+                  <input id="planned-meal-calories" type="number" min="0" step="1" placeholder="opcjonalnie">
+                </label>
+                <label>
+                  <span>Białko</span>
+                  <input id="planned-meal-protein" type="number" min="0" step="0.1" placeholder="opcjonalnie">
+                </label>
+                <label class="wide">
+                  <span>Notatka</span>
+                  <textarea id="planned-meal-note" placeholder="Np. zrobić wcześniej, kupić składniki"></textarea>
+                </label>
+                <div class="button-row wide">
+                  <button class="primary-button" type="submit">
+                    <i data-lucide="save"></i>
+                    Zapisz plan
+                  </button>
+                  <button class="ghost-button" id="reset-planned-meal" type="button">Wyczyść</button>
+                </div>
+              </form>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Najbliższe posiłki</h2>
+                <span id="planned-meals-count" class="stat-chip">0</span>
+              </div>
+              <div id="planned-meals-list" class="planned-meals-list"></div>
             </div>
           </section>
         </section>
@@ -557,6 +688,41 @@
             </article>
           </section>
 
+          <section class="panel recipe-filter-panel">
+            <div class="panel-heading compact-heading">
+              <h2>Filtry przepisów</h2>
+              <button class="ghost-button compact" id="clear-recipe-filters" type="button">Wyczyść</button>
+            </div>
+            <div class="recipe-filter-grid">
+              <label>
+                <span>Szukaj</span>
+                <input id="recipe-search" type="search" placeholder="Nazwa lub składnik">
+              </label>
+              <label>
+                <span>Typ</span>
+                <select id="recipe-type-filter">
+                  <option value="all">Wszystkie</option>
+                  <option value="Breakfast">Śniadanie</option>
+                  <option value="Lunch">Lunch</option>
+                  <option value="Dinner">Obiad</option>
+                  <option value="Snack">Przekąska</option>
+                </select>
+              </label>
+              <label>
+                <span>Max kcal</span>
+                <input id="recipe-max-calories" type="number" min="0" step="10" placeholder="np. 500">
+              </label>
+              <label>
+                <span>Min białko</span>
+                <input id="recipe-min-protein" type="number" min="0" step="1" placeholder="np. 25">
+              </label>
+              <label>
+                <span>Max czas</span>
+                <input id="recipe-max-time" type="number" min="0" step="1" placeholder="min">
+              </label>
+            </div>
+          </section>
+
           <section class="recipe-grid" id="recipe-list" aria-label="Lista przepisów">
             <article class="recipe-card">
               <div class="recipe-icon"><i data-lucide="salad"></i></div>
@@ -661,6 +827,16 @@
                 </div>
               </form>
             </div>
+            <div class="panel shopping-list-panel">
+              <div class="panel-heading">
+                <h2>Lista zakupów</h2>
+                <button class="ghost-button compact" id="clear-shopping-list" type="button">
+                  <i data-lucide="trash-2"></i>
+                  Wyczyść
+                </button>
+              </div>
+              <div id="shopping-list-items" class="shopping-list-items"></div>
+            </div>
           </section>
         </section>
 
@@ -688,6 +864,18 @@
                 <span>Średnia woda</span>
                 <strong id="trend-avg-water">0 L</strong>
               </article>
+            </div>
+          </section>
+
+          <section class="panel weekly-review-panel">
+            <div class="panel-heading">
+              <h2>Podsumowanie tygodnia</h2>
+              <span id="weekly-review-range" class="stat-chip">7 dni</span>
+            </div>
+            <div id="weekly-review-grid" class="weekly-review-grid"></div>
+            <div class="weekly-review-note">
+              <strong>Co działało / co poprawić</strong>
+              <p id="weekly-review-note"></p>
             </div>
           </section>
 
@@ -831,6 +1019,43 @@
 
             <div class="panel">
               <div class="panel-heading">
+                <h2>Cele tygodniowe</h2>
+                <span class="stat-chip">Nawyki</span>
+              </div>
+              <form id="habit-goals-form" class="settings-form">
+                <label>
+                  <span>Dni z wpisami</span>
+                  <input id="habit-logging-days" type="number" min="1" max="7" step="1">
+                </label>
+                <label>
+                  <span>Dni z wodą</span>
+                  <input id="habit-water-days" type="number" min="1" max="7" step="1">
+                </label>
+                <label>
+                  <span>Dni z ważeniem</span>
+                  <input id="habit-weigh-days" type="number" min="0" max="7" step="1">
+                </label>
+                <label>
+                  <span>Dni z białkiem</span>
+                  <input id="habit-protein-days" type="number" min="1" max="7" step="1">
+                </label>
+                <label class="toggle-row wide">
+                  <input id="habit-reminder-morning" type="checkbox">
+                  <span>Przypomnienie rano o planie</span>
+                </label>
+                <label class="toggle-row wide">
+                  <input id="habit-reminder-evening" type="checkbox">
+                  <span>Przypomnienie wieczorem o dzienniku</span>
+                </label>
+                <button class="secondary-button wide" type="submit">
+                  <i data-lucide="bell"></i>
+                  Zapisz nawyki
+                </button>
+              </form>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
                 <h2>Dane</h2>
               </div>
               <div class="data-actions">
@@ -848,6 +1073,7 @@
                 </button>
               </div>
               <p class="storage-note" id="storage-note"></p>
+              <div class="sync-meta" id="sync-meta"></div>
             </div>
           </section>
         </section>

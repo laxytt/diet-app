@@ -5,6 +5,8 @@
   const STORAGE_PREFIX = 'diet-studio:v2';
   const CURRENT_PROFILE_KEY = 'diet-studio:current-profile';
   const REMOTE_REVISION_PREFIX = 'diet-studio:remote-revision';
+  const LAST_SYNC_PREFIX = 'diet-studio:last-sync';
+  const BACKUP_PREFIX = 'diet-studio:backup';
   const REMOTE_TABLE = 'diet_profiles';
   const ASSIGNMENTS_TABLE = 'profile_assignments';
   const DEFAULT_PROFILE_ID = 'agnieszka';
@@ -119,7 +121,21 @@
     weights: [],
     water: [],
     dailyCoach: {},
-    deletedEntryIds: []
+    deletedEntryIds: [],
+    mealTemplates: [],
+    plannedMeals: [],
+    shoppingLists: [],
+    weeklyReviews: {},
+    habitGoals: {
+      loggingDays: 5,
+      waterDays: 5,
+      weighDays: 3,
+      proteinDays: 5,
+      reminderMorning: false,
+      reminderEvening: false
+    },
+    undoStack: [],
+    backupMeta: null
   };
 
   let currentProfileId = loadCurrentProfileId();
@@ -144,6 +160,7 @@
   let isAuthInitializing = true;
   const signupModes = { gate: false };
   let sessionRefreshPromise = null;
+  let reminderTimer = 0;
 
   const $ = (id) => document.getElementById(id);
 
@@ -161,6 +178,7 @@
     isAuthInitializing = false;
     updateSyncUI();
     render();
+    scheduleLocalReminders();
     registerServiceWorker();
   }
 
@@ -192,6 +210,17 @@
     $('gate-auth-form').addEventListener('submit', loginUser);
     $('gate-signup-button').addEventListener('click', signUpUser);
     $('gate-google-button').addEventListener('click', loginWithGoogle);
+    $('quick-entry-form').addEventListener('submit', addQuickEntry);
+    $('reset-entry-form').addEventListener('click', resetEntryFormWithUndo);
+    $('undo-last-action').addEventListener('click', undoLastAction);
+    $('recent-meals-list').addEventListener('click', handleQuickMealAction);
+    $('meal-template-list').addEventListener('click', handleTemplateAction);
+    $('planned-meal-form').addEventListener('submit', savePlannedMeal);
+    $('reset-planned-meal').addEventListener('click', resetPlannedMealForm);
+    $('planned-meal-title').addEventListener('change', hydratePlannedMealFromTitle);
+    $('planned-meal-type').addEventListener('change', hydratePlannedMealFromTitle);
+    $('planned-meals-list').addEventListener('click', handlePlannedMealAction);
+    $('plan-tomorrow-button').addEventListener('click', planTomorrow);
     $('quick-add-meal').addEventListener('click', focusMealForm);
     $('dashboard-open-diary').addEventListener('click', () => switchView('diary'));
     $('diary-focus-add').addEventListener('click', focusMealForm);
@@ -212,7 +241,39 @@
 
     $('meal-groups').addEventListener('click', (event) => {
       const deleteButton = event.target.closest('[data-delete-entry]');
+      const repeatButton = event.target.closest('[data-repeat-entry]');
+      const templateButton = event.target.closest('[data-template-from-entry]');
+      const saveTemplateButton = event.target.closest('[data-save-template]');
+
+      if (repeatButton) {
+        const entry = state.entries.find((item) => item.id === repeatButton.dataset.repeatEntry);
+        if (!entry) return;
+        state.entries.push(duplicateEntryToDate(entry, currentDate));
+        saveState();
+        render();
+        toast('Wpis dodany ponownie.');
+        return;
+      }
+
+      if (templateButton) {
+        const entry = state.entries.find((item) => item.id === templateButton.dataset.templateFromEntry);
+        if (!entry) return;
+        saveSingleEntryTemplate(entry);
+        return;
+      }
+
+      if (saveTemplateButton) {
+        saveMealTemplate(saveTemplateButton.dataset.saveTemplate);
+        return;
+      }
+
       if (!deleteButton) return;
+      const deletedEntry = state.entries.find((entry) => entry.id === deleteButton.dataset.deleteEntry);
+      if (deletedEntry) pushUndo({
+        type: 'restore-entries',
+        entries: [structuredCloneSafe(deletedEntry)],
+        createdAt: new Date().toISOString()
+      });
       markEntryDeleted(deleteButton.dataset.deleteEntry);
       state.entries = state.entries.filter((entry) => entry.id !== deleteButton.dataset.deleteEntry);
       saveState();
@@ -231,12 +292,20 @@
     $('reset-recipe-form').addEventListener('click', resetRecipeForm);
     $('recipe-list').addEventListener('click', handleRecipeAction);
     $('recipe-premium-options').addEventListener('click', handlePaidRecipeAction);
+    $('shopping-list-items').addEventListener('click', handleShoppingListAction);
+    ['recipe-search', 'recipe-type-filter', 'recipe-max-calories', 'recipe-min-protein', 'recipe-max-time'].forEach((id) => {
+      $(id).addEventListener('input', renderRecipes);
+      $(id).addEventListener('change', renderRecipes);
+    });
+    $('clear-recipe-filters').addEventListener('click', clearRecipeFilters);
+    $('clear-shopping-list').addEventListener('click', clearShoppingList);
 
     $('trend-range').addEventListener('change', () => {
       renderCharts();
       renderTrendSummary();
     });
     $('settings-form').addEventListener('submit', saveSettings);
+    $('habit-goals-form').addEventListener('submit', saveHabitGoals);
     $('logout-button').addEventListener('click', logoutUser);
     $('avatar-input').addEventListener('change', handleAvatarUpload);
     $('remove-avatar').addEventListener('click', removeAvatar);
@@ -264,16 +333,23 @@
     renderProfileVisuals();
     renderDailyCoach();
     renderDashboardInsights();
+    renderHabitGoalProgress();
     renderDashboardMeals();
     renderDatalist();
+    renderPlanOptions();
     renderDiary();
+    renderQuickTools();
+    renderPlannedMeals();
     renderBodyInputs();
     renderFoods();
     renderRecipes();
+    renderShoppingList();
     renderSettings();
     renderStorageNote();
+    renderSyncMeta();
     renderAIResult();
     renderTrendSummary();
+    renderWeeklyReview();
     updateSyncUI();
     updateEntryPreview();
     renderCharts();
@@ -350,6 +426,10 @@
       timeoutId = window.setTimeout(() => reject(new Error(message)), milliseconds);
     });
     return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
+  }
+
+  function delay(milliseconds) {
+    return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
   }
 
   function loadCurrentProfileId() {
@@ -874,15 +954,43 @@
       return;
     }
 
-    if (!updated) {
-      if (attempt < 1) return saveRemoteProfileInternal(profileId, merged, attempt + 1);
-      toast('Synchronizacja wykryła konflikt. Odświeżam dane przed kolejnym zapisem.');
-      await loadRemoteProfile(profileId);
-      return;
-    }
+    if (!updated) return handleRemoteSaveConflict(profileId, merged, attempt);
 
     setRemoteRevision(profile.id, numberValue(updated.revision, nextRevision));
     syncLocalStateAfterRemoteSave(profile.id, snapshot, merged);
+  }
+
+  async function handleRemoteSaveConflict(profileId, mergedSnapshot, attempt) {
+    const profile = profileById(profileId);
+    const { data, error } = await supabaseClient
+      .from(REMOTE_TABLE)
+      .select('data, revision')
+      .eq('user_id', syncSession.user.id)
+      .eq('profile_id', profile.id)
+      .maybeSingle();
+
+    if (error) {
+      toast(`Nie udało się odświeżyć konfliktu synchronizacji: ${error.message}`);
+      return;
+    }
+
+    const freshRemote = normalizeState(data && data.data ? data.data : {});
+    const nextSnapshot = mergeStates(freshRemote, mergedSnapshot, { preferSettings: 'incoming' });
+    if (data) setRemoteRevision(profile.id, numberValue(data.revision, lastRemoteRevision));
+
+    if (profileId === currentProfileId) {
+      state = mergeStates(state, nextSnapshot, { preferSettings: 'incoming' });
+      localStorage.setItem(storageKey(profileId), JSON.stringify(state));
+      render();
+    }
+
+    if (attempt < 3) {
+      await delay(220 + attempt * 180);
+      return saveRemoteProfileInternal(profileId, nextSnapshot, attempt + 1);
+    }
+
+    pendingRemoteSave = false;
+    updateSyncUI();
   }
 
   function syncLocalStateAfterRemoteSave(profileId, snapshot, merged) {
@@ -913,7 +1021,16 @@
       weights: mergeByDate(base.weights, incoming.weights),
       water: mergeByDate(base.water, incoming.water),
       dailyCoach: { ...base.dailyCoach, ...incoming.dailyCoach },
-      deletedEntryIds
+      deletedEntryIds,
+      mealTemplates: mergeById(base.mealTemplates, incoming.mealTemplates),
+      plannedMeals: mergeById(base.plannedMeals, incoming.plannedMeals),
+      shoppingLists: mergeById(base.shoppingLists, incoming.shoppingLists),
+      weeklyReviews: { ...base.weeklyReviews, ...incoming.weeklyReviews },
+      habitGoals: options.preferSettings === 'base'
+        ? { ...defaultState.habitGoals, ...base.habitGoals }
+        : { ...defaultState.habitGoals, ...incoming.habitGoals },
+      undoStack: trimUndoStack([...(base.undoStack || []), ...(incoming.undoStack || [])]),
+      backupMeta: latestByCreatedAt(base.backupMeta, incoming.backupMeta)
     });
   }
 
@@ -949,6 +1066,23 @@
       byKey.set(key, { ...(byKey.get(key) || {}), ...recipe });
     });
     return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function mergeById(baseItems, incomingItems) {
+    const byId = new Map();
+    [...baseItems, ...incomingItems].forEach((item) => {
+      if (!item || !item.id) return;
+      byId.set(item.id, { ...(byId.get(item.id) || {}), ...item });
+    });
+    return [...byId.values()].sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+  }
+
+  function latestByCreatedAt(baseItem, incomingItem) {
+    if (!baseItem) return incomingItem || null;
+    if (!incomingItem) return baseItem || null;
+    const baseTime = Date.parse(baseItem.createdAt || '') || 0;
+    const incomingTime = Date.parse(incomingItem.createdAt || '') || 0;
+    return incomingTime >= baseTime ? incomingItem : baseItem;
   }
 
   function mergeProfile(baseProfile = {}, incomingProfile = {}) {
@@ -988,6 +1122,14 @@
     return `${REMOTE_REVISION_PREFIX}:${profileId}`;
   }
 
+  function lastSyncKey(profileId) {
+    return `${LAST_SYNC_PREFIX}:${profileId}`;
+  }
+
+  function backupKey(profileId) {
+    return `${BACKUP_PREFIX}:${profileId}`;
+  }
+
   function loadRemoteRevision(profileId) {
     return numberValue(localStorage.getItem(remoteRevisionKey(profileId)), 0);
   }
@@ -995,6 +1137,7 @@
   function setRemoteRevision(profileId, revision) {
     lastRemoteRevision = numberValue(revision, 0);
     localStorage.setItem(remoteRevisionKey(profileId), String(lastRemoteRevision));
+    localStorage.setItem(lastSyncKey(profileId), new Date().toISOString());
   }
 
   function renderSummary() {
@@ -1216,6 +1359,72 @@
         <button class="icon-button" type="button" data-delete-entry="${entry.id}" aria-label="Usuń ${escapeHTML(entry.foodName)}" title="Usuń">
           <i data-lucide="x"></i>
         </button>
+      </div>
+    `;
+  }
+
+  function renderDiary() {
+    const entries = entriesForDate(currentDate);
+    const html = MEALS.map((meal) => {
+      const meta = mealMeta(meal);
+      const mealEntries = entries.filter((entry) => entry.meal === meal);
+      const totals = sumEntries(mealEntries);
+      const rows = mealEntries.length
+        ? mealEntries.map(renderDiaryRow).join('')
+        : '<div class="empty-state meal-empty">Brak wpisow</div>';
+      return `
+        <section class="meal-section meal-${meal.toLowerCase()}">
+          <div class="meal-title">
+            <span class="meal-title-main">
+              <i data-lucide="${meta.icon}"></i>
+              <span>
+                <strong>${mealLabel(meal)}</strong>
+                <em>${meta.time}</em>
+              </span>
+            </span>
+            <span class="meal-title-actions">
+              <small>${Math.round(totals.calories)} kcal · ${round1(totals.protein)}b / ${round1(totals.carbs)}w / ${round1(totals.fat)}t</small>
+              ${mealEntries.length ? `
+                <button class="icon-button subtle" type="button" data-save-template="${meal}" aria-label="Zapisz ${mealLabel(meal)} jako szablon" title="Zapisz jako szablon">
+                  <i data-lucide="bookmark-plus"></i>
+                </button>
+              ` : ''}
+            </span>
+          </div>
+          ${rows}
+        </section>
+      `;
+    }).join('');
+
+    $('meal-groups').innerHTML = html;
+  }
+
+  function renderDiaryRow(entry) {
+    const macroWarning = isMacroIncomplete(entry)
+      ? '<small class="macro-warning">Makro niepelne</small>'
+      : '';
+    return `
+      <div class="entry-row">
+        <div>
+          <strong title="${escapeHTML(entry.foodName)}">${escapeHTML(entry.foodName)}</strong>
+          <small>${formatEntryAmount(entry)}</small>
+          ${macroWarning}
+        </div>
+        <span class="macro-number">${Math.round(entry.calories)}</span>
+        <span class="macro-number">${round1(entry.protein)}b</span>
+        <span class="macro-number hide-sm">${round1(entry.carbs)}w</span>
+        <span class="macro-number hide-sm">${round1(entry.fat)}t</span>
+        <div class="row-actions">
+          <button class="icon-button" type="button" data-repeat-entry="${entry.id}" aria-label="Dodaj ponownie ${escapeHTML(entry.foodName)}" title="Dodaj ponownie">
+            <i data-lucide="repeat-2"></i>
+          </button>
+          <button class="icon-button" type="button" data-template-from-entry="${entry.id}" aria-label="Zapisz ${escapeHTML(entry.foodName)} jako szablon" title="Zapisz jako szablon">
+            <i data-lucide="bookmark-plus"></i>
+          </button>
+          <button class="icon-button" type="button" data-delete-entry="${entry.id}" aria-label="Usun ${escapeHTML(entry.foodName)}" title="Usun">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
       </div>
     `;
   }
@@ -1552,6 +1761,502 @@
     toast('Skopiowano wczorajsze wpisy.');
   }
 
+  function addQuickEntry(event) {
+    event.preventDefault();
+    const name = $('quick-entry-name').value.trim();
+    const calories = numberValue($('quick-entry-calories').value, 0);
+    if (!name || calories <= 0) {
+      toast('Podaj nazwe i kalorie szybkiego wpisu.');
+      return;
+    }
+
+    state.entries.push({
+      id: uid(),
+      date: currentDate,
+      meal: $('entry-meal').value || 'Snack',
+      foodId: null,
+      foodName: name,
+      amount: 1,
+      unit: 'porcja',
+      grams: 1,
+      calories,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+      macroIncomplete: true,
+      source: 'quick',
+      createdAt: new Date().toISOString()
+    });
+
+    $('quick-entry-name').value = '';
+    $('quick-entry-calories').value = '';
+    saveState();
+    render();
+    toast('Szybki wpis dodany.');
+  }
+
+  function entryFormSnapshot() {
+    return {
+      meal: $('entry-meal').value,
+      food: $('entry-food').value,
+      amount: $('entry-grams').value,
+      unit: $('entry-unit').value,
+      calories: $('entry-calories').value,
+      protein: $('entry-protein').value,
+      carbs: $('entry-carbs').value,
+      fat: $('entry-fat').value,
+      quickName: $('quick-entry-name').value,
+      quickCalories: $('quick-entry-calories').value,
+      aiText: $('ai-meal-text').value
+    };
+  }
+
+  function restoreEntryFormSnapshot(snapshot) {
+    if (!snapshot) return;
+    $('entry-meal').value = snapshot.meal || 'Snack';
+    $('entry-food').value = snapshot.food || '';
+    $('entry-grams').value = snapshot.amount || '100';
+    $('entry-unit').value = snapshot.unit || 'g';
+    $('entry-calories').value = snapshot.calories || '';
+    $('entry-protein').value = snapshot.protein || '';
+    $('entry-carbs').value = snapshot.carbs || '';
+    $('entry-fat').value = snapshot.fat || '';
+    $('quick-entry-name').value = snapshot.quickName || '';
+    $('quick-entry-calories').value = snapshot.quickCalories || '';
+    $('ai-meal-text').value = snapshot.aiText || '';
+    updateEntryPreview();
+  }
+
+  function resetEntryFormWithUndo() {
+    pushUndo({
+      type: 'restore-entry-form',
+      values: entryFormSnapshot(),
+      createdAt: new Date().toISOString()
+    });
+    $('entry-food').value = '';
+    $('entry-grams').value = '100';
+    $('entry-unit').value = 'g';
+    $('entry-calories').value = '';
+    $('entry-protein').value = '';
+    $('entry-carbs').value = '';
+    $('entry-fat').value = '';
+    $('quick-entry-name').value = '';
+    $('quick-entry-calories').value = '';
+    $('ai-meal-text').value = '';
+    aiDraft = null;
+    updateEntryPreview();
+    renderAIResult();
+    toast('Formularz wyczyszczony.');
+  }
+
+  function pushUndo(action) {
+    state.undoStack = trimUndoStack([...(state.undoStack || []), action]);
+    localStorage.setItem(storageKey(currentProfileId), JSON.stringify(normalizeState(state)));
+  }
+
+  function undoLastAction() {
+    const stack = Array.isArray(state.undoStack) ? [...state.undoStack] : [];
+    const action = stack.pop();
+    if (!action) {
+      toast('Nie ma czego cofnac.');
+      return;
+    }
+    state.undoStack = stack;
+
+    if (action.type === 'restore-entries') {
+      const entries = Array.isArray(action.entries) ? action.entries : [];
+      entries.forEach((entry) => {
+        if (!entry || !entry.id) return;
+        state.deletedEntryIds = (state.deletedEntryIds || []).filter((id) => id !== entry.id);
+        if (!state.entries.some((item) => item.id === entry.id)) state.entries.push(entry);
+      });
+      saveState();
+      render();
+      toast('Cofnieto usuniecie wpisu.');
+      return;
+    }
+
+    if (action.type === 'restore-entry-form') {
+      restoreEntryFormSnapshot(action.values);
+      localStorage.setItem(storageKey(currentProfileId), JSON.stringify(normalizeState(state)));
+      toast('Przywrocono formularz.');
+      return;
+    }
+
+    saveState();
+    render();
+  }
+
+  function duplicateEntryToDate(entry, date = currentDate, meal = entry.meal) {
+    return {
+      ...structuredCloneSafe(entry),
+      id: uid(),
+      date,
+      meal,
+      copiedFrom: entry.id,
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  function isMacroIncomplete(entry) {
+    return Boolean(entry && entry.macroIncomplete)
+      || (numberValue(entry.calories, 0) > 0
+        && numberValue(entry.protein, 0) === 0
+        && numberValue(entry.carbs, 0) === 0
+        && numberValue(entry.fat, 0) === 0);
+  }
+
+  function renderQuickTools() {
+    renderRecentMeals();
+    renderMealTemplates();
+  }
+
+  function renderRecentMeals() {
+    const container = $('recent-meals-list');
+    if (!container) return;
+    const since = addDays(currentDate, -7);
+    const recent = [];
+    const seen = new Set();
+    [...state.entries]
+      .filter((entry) => entry.date >= since && entry.date <= currentDate)
+      .sort((a, b) => String(b.createdAt || b.date || '').localeCompare(String(a.createdAt || a.date || '')))
+      .forEach((entry) => {
+        const key = `${normalize(entry.foodName)}:${Math.round(numberValue(entry.calories, 0))}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        recent.push(entry);
+      });
+
+    container.innerHTML = recent.length
+      ? recent.slice(0, 8).map((entry) => `
+        <article class="quick-list-item">
+          <div>
+            <strong title="${escapeHTML(entry.foodName)}">${escapeHTML(entry.foodName)}</strong>
+            <span>${shortDate(entry.date)} · ${mealLabel(entry.meal)} · ${Math.round(entry.calories)} kcal</span>
+          </div>
+          <div class="row-actions">
+            <button class="icon-button" type="button" data-quick-repeat="${entry.id}" title="Dodaj ponownie" aria-label="Dodaj ponownie ${escapeHTML(entry.foodName)}">
+              <i data-lucide="plus"></i>
+            </button>
+            <button class="icon-button" type="button" data-quick-template="${entry.id}" title="Zapisz jako szablon" aria-label="Zapisz jako szablon ${escapeHTML(entry.foodName)}">
+              <i data-lucide="bookmark-plus"></i>
+            </button>
+          </div>
+        </article>
+      `).join('')
+      : '<div class="empty-state">Brak ostatnich posilkow z 7 dni.</div>';
+  }
+
+  function renderMealTemplates() {
+    const container = $('meal-template-list');
+    if (!container) return;
+    const templates = [...(state.mealTemplates || [])]
+      .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+
+    container.innerHTML = templates.length
+      ? templates.slice(0, 8).map((template) => `
+        <article class="quick-list-item">
+          <div>
+            <strong title="${escapeHTML(template.name)}">${escapeHTML(template.name)}</strong>
+            <span>${template.entries.length} wpisy · ${Math.round(template.totalCalories || 0)} kcal</span>
+          </div>
+          <div class="row-actions">
+            <button class="icon-button" type="button" data-template-add="${template.id}" title="Dodaj zestaw" aria-label="Dodaj zestaw ${escapeHTML(template.name)}">
+              <i data-lucide="plus"></i>
+            </button>
+            <button class="icon-button" type="button" data-template-delete="${template.id}" title="Usun szablon" aria-label="Usun szablon ${escapeHTML(template.name)}">
+              <i data-lucide="trash-2"></i>
+            </button>
+          </div>
+        </article>
+      `).join('')
+      : '<div class="empty-state">Zapisz posilek jako szablon, zeby dodawac go jednym kliknieciem.</div>';
+  }
+
+  function handleQuickMealAction(event) {
+    const repeat = event.target.closest('[data-quick-repeat]');
+    const template = event.target.closest('[data-quick-template]');
+    if (repeat) {
+      const entry = state.entries.find((item) => item.id === repeat.dataset.quickRepeat);
+      if (!entry) return;
+      state.entries.push(duplicateEntryToDate(entry, currentDate));
+      saveState();
+      render();
+      toast('Dodano z ostatnich posilkow.');
+      return;
+    }
+    if (template) {
+      const entry = state.entries.find((item) => item.id === template.dataset.quickTemplate);
+      if (!entry) return;
+      saveSingleEntryTemplate(entry);
+    }
+  }
+
+  function handleTemplateAction(event) {
+    const add = event.target.closest('[data-template-add]');
+    const remove = event.target.closest('[data-template-delete]');
+    if (add) {
+      const template = (state.mealTemplates || []).find((item) => item.id === add.dataset.templateAdd);
+      if (!template) return;
+      template.entries.forEach((entry) => {
+        state.entries.push(duplicateEntryToDate(entry, currentDate, entry.meal || template.meal || 'Snack'));
+      });
+      saveState();
+      render();
+      toast('Szablon dodany do dziennika.');
+      return;
+    }
+    if (remove) {
+      state.mealTemplates = (state.mealTemplates || []).filter((item) => item.id !== remove.dataset.templateDelete);
+      saveState();
+      render();
+      toast('Szablon usuniety.');
+    }
+  }
+
+  function saveSingleEntryTemplate(entry) {
+    const name = entry.foodName || 'Szablon posilku';
+    saveTemplate(name, [entry], entry.meal || 'Snack');
+  }
+
+  function saveMealTemplate(meal) {
+    const entries = entriesForDate(currentDate).filter((entry) => entry.meal === meal);
+    if (!entries.length) {
+      toast('Ten posilek nie ma wpisow do zapisania.');
+      return;
+    }
+    saveTemplate(`${mealLabel(meal)} ${shortDate(currentDate)}`, entries, meal);
+  }
+
+  function saveTemplate(name, entries, meal) {
+    const normalizedName = normalize(name);
+    const now = new Date().toISOString();
+    const templateEntries = entries.map((entry) => ({
+      ...structuredCloneSafe(entry),
+      templateSourceId: entry.id
+    }));
+    const totalCalories = sumEntries(templateEntries).calories;
+    const existing = (state.mealTemplates || []).find((item) => normalize(item.name) === normalizedName);
+    const template = {
+      id: existing ? existing.id : uid(),
+      name,
+      meal,
+      entries: templateEntries,
+      totalCalories,
+      createdAt: existing ? existing.createdAt : now,
+      updatedAt: now
+    };
+    if (existing) Object.assign(existing, template);
+    else state.mealTemplates.push(template);
+    saveState();
+    render();
+    toast('Szablon zapisany.');
+  }
+
+  function renderPlanOptions() {
+    const target = $('plan-options');
+    if (!target) return;
+    const foodOptions = state.foods.map((food) => `<option value="${escapeHTML(food.name)}">Produkt</option>`);
+    const recipeOptions = state.recipes.map((recipe) => `<option value="${escapeHTML(recipe.name)}">Przepis</option>`);
+    target.innerHTML = foodOptions.concat(recipeOptions).join('');
+  }
+
+  function resetPlannedMealForm() {
+    $('planned-meal-id').value = '';
+    $('planned-meal-date').value = currentDate;
+    $('planned-meal-meal').value = 'Snack';
+    $('planned-meal-type').value = 'note';
+    $('planned-meal-title').value = '';
+    $('planned-meal-calories').value = '';
+    $('planned-meal-protein').value = '';
+    $('planned-meal-note').value = '';
+  }
+
+  function hydratePlannedMealFromTitle() {
+    const type = $('planned-meal-type').value;
+    const title = $('planned-meal-title').value.trim();
+    if (!title) return;
+    const recipe = type === 'recipe' ? state.recipes.find((item) => normalize(item.name) === normalize(title)) : null;
+    const food = type === 'food' ? findFoodByName(title) : null;
+    const source = recipe || food;
+    if (!source) return;
+    $('planned-meal-calories').value = Math.round(numberValue(source.calories, 0));
+    $('planned-meal-protein').value = round1(numberValue(source.protein, 0));
+  }
+
+  function planTomorrow() {
+    switchView('plan');
+    resetPlannedMealForm();
+    $('planned-meal-date').value = addDays(currentDate, 1);
+    $('planned-meal-title').focus();
+  }
+
+  function savePlannedMeal(event) {
+    event.preventDefault();
+    const title = $('planned-meal-title').value.trim();
+    if (!title) {
+      toast('Dodaj nazwe planowanego posilku.');
+      return;
+    }
+
+    const id = $('planned-meal-id').value || uid();
+    const type = $('planned-meal-type').value || 'note';
+    const date = $('planned-meal-date').value || currentDate;
+    const existingIndex = state.plannedMeals.findIndex((item) => item.id === id);
+    const source = plannedMealSource(type, title);
+    const now = new Date().toISOString();
+    const plannedMeal = {
+      id,
+      date,
+      meal: $('planned-meal-meal').value || 'Snack',
+      type,
+      title,
+      calories: numberValue($('planned-meal-calories').value, source ? source.calories : 0),
+      protein: numberValue($('planned-meal-protein').value, source ? source.protein : 0),
+      note: $('planned-meal-note').value.trim(),
+      sourceId: source ? source.id : null,
+      createdAt: existingIndex >= 0 ? state.plannedMeals[existingIndex].createdAt : now,
+      updatedAt: now
+    };
+
+    if (existingIndex >= 0) state.plannedMeals[existingIndex] = plannedMeal;
+    else state.plannedMeals.push(plannedMeal);
+    saveState();
+    resetPlannedMealForm();
+    render();
+    toast('Plan zapisany.');
+  }
+
+  function plannedMealSource(type, title) {
+    if (type === 'recipe') return state.recipes.find((item) => normalize(item.name) === normalize(title)) || null;
+    if (type === 'food') return findFoodByName(title) || null;
+    return null;
+  }
+
+  function renderPlannedMeals() {
+    const container = $('planned-meals-list');
+    if (!container) return;
+    const from = addDays(currentDate, -1);
+    const to = addDays(currentDate, 7);
+    const plans = [...(state.plannedMeals || [])]
+      .filter((item) => item.date >= from && item.date <= to)
+      .sort((a, b) => a.date.localeCompare(b.date) || MEALS.indexOf(a.meal) - MEALS.indexOf(b.meal));
+
+    $('planned-meals-count').textContent = String(plans.length);
+    container.innerHTML = plans.length
+      ? plans.map((plan) => `
+        <article class="planned-meal-card ${plan.date < currentDate ? 'is-past' : ''}">
+          <div class="planned-meal-icon"><i data-lucide="${planTypeIcon(plan.type)}"></i></div>
+          <div>
+            <strong title="${escapeHTML(plan.title)}">${escapeHTML(plan.title)}</strong>
+            <span>${formatDateLabel(plan.date)} · ${mealLabel(plan.meal)} · ${Math.round(numberValue(plan.calories, 0)) || '-'} kcal</span>
+            ${plan.note ? `<p>${escapeHTML(plan.note)}</p>` : ''}
+          </div>
+          <div class="row-actions">
+            <button class="icon-button" type="button" data-plan-log="${plan.id}" title="Przenies do dziennika" aria-label="Przenies ${escapeHTML(plan.title)} do dziennika">
+              <i data-lucide="check"></i>
+            </button>
+            <button class="icon-button" type="button" data-plan-edit="${plan.id}" title="Edytuj" aria-label="Edytuj ${escapeHTML(plan.title)}">
+              <i data-lucide="pencil"></i>
+            </button>
+            <button class="icon-button" type="button" data-plan-delete="${plan.id}" title="Usun" aria-label="Usun ${escapeHTML(plan.title)}">
+              <i data-lucide="trash-2"></i>
+            </button>
+          </div>
+        </article>
+      `).join('')
+      : '<div class="empty-state">Brak zaplanowanych posilkow. Dodaj pierwszy po lewej.</div>';
+  }
+
+  function planTypeIcon(type) {
+    if (type === 'recipe') return 'chef-hat';
+    if (type === 'food') return 'database';
+    return 'sticky-note';
+  }
+
+  function handlePlannedMealAction(event) {
+    const log = event.target.closest('[data-plan-log]');
+    const edit = event.target.closest('[data-plan-edit]');
+    const remove = event.target.closest('[data-plan-delete]');
+
+    if (log) {
+      const plan = state.plannedMeals.find((item) => item.id === log.dataset.planLog);
+      if (!plan) return;
+      addPlannedMealToDiary(plan);
+      return;
+    }
+
+    if (edit) {
+      const plan = state.plannedMeals.find((item) => item.id === edit.dataset.planEdit);
+      if (!plan) return;
+      $('planned-meal-id').value = plan.id;
+      $('planned-meal-date').value = plan.date || currentDate;
+      $('planned-meal-meal').value = plan.meal || 'Snack';
+      $('planned-meal-type').value = plan.type || 'note';
+      $('planned-meal-title').value = plan.title || '';
+      $('planned-meal-calories').value = numberValue(plan.calories, 0) || '';
+      $('planned-meal-protein').value = numberValue(plan.protein, 0) || '';
+      $('planned-meal-note').value = plan.note || '';
+      $('planned-meal-title').focus();
+      return;
+    }
+
+    if (remove) {
+      state.plannedMeals = state.plannedMeals.filter((item) => item.id !== remove.dataset.planDelete);
+      saveState();
+      render();
+      toast('Plan usuniety.');
+    }
+  }
+
+  function addPlannedMealToDiary(plan) {
+    const source = plannedMealSource(plan.type, plan.title);
+    const food = plan.type === 'recipe' && source ? addRecipeAsFood(source) : (plan.type === 'food' ? source : null);
+    state.entries.push({
+      id: uid(),
+      date: plan.date || currentDate,
+      meal: plan.meal || 'Snack',
+      foodId: food ? food.id : null,
+      foodName: plan.title,
+      amount: 1,
+      unit: plan.type === 'note' ? 'porcja' : foodServingUnit(food || {}),
+      grams: 1,
+      calories: numberValue(plan.calories, source ? source.calories : 0),
+      protein: numberValue(plan.protein, source ? source.protein : 0),
+      carbs: numberValue(source && source.carbs, 0),
+      fat: numberValue(source && source.fat, 0),
+      macroIncomplete: !source && numberValue(plan.calories, 0) > 0,
+      source: 'plan',
+      plannedMealId: plan.id,
+      createdAt: new Date().toISOString()
+    });
+    state.plannedMeals = state.plannedMeals.filter((item) => item.id !== plan.id);
+    currentDate = plan.date || currentDate;
+    saveState();
+    render();
+    switchView('diary');
+    toast('Plan przeniesiony do dziennika.');
+  }
+
+  function recipeToPlannedMeal(recipe, date = currentDate) {
+    state.plannedMeals.push({
+      id: uid(),
+      date,
+      meal: 'Dinner',
+      type: 'recipe',
+      title: recipe.name,
+      calories: numberValue(recipe.calories, 0),
+      protein: numberValue(recipe.protein, 0),
+      note: recipe.description || '',
+      sourceId: recipe.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    saveState();
+    render();
+    toast('Przepis dodany do planu.');
+  }
+
   function renderFoods() {
     const query = normalize($('food-search').value || '');
     const foods = [...state.foods]
@@ -1815,6 +2520,236 @@
       render();
       toast('Przepis usunięty.');
     }
+  }
+
+  function renderRecipes() {
+    const recipes = (Array.isArray(state.recipes) ? state.recipes : []).filter(recipeMatchesFilters);
+    $('recipe-list').innerHTML = recipes.length
+      ? recipes.map(renderRecipeCard).join('')
+      : '<div class="empty-state">Nie znaleziono przepisow dla tych filtrow.</div>';
+    refreshIcons();
+  }
+
+  function renderRecipeCard(recipe) {
+    const ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients.slice(0, 4) : [];
+    return `
+      <article class="recipe-card">
+        <div class="recipe-icon"><i data-lucide="${recipeIcon(recipe)}"></i></div>
+        <div class="recipe-content">
+          <h3>${escapeHTML(recipe.name)}</h3>
+          <p>${escapeHTML(recipe.description || ingredients.join(', ') || 'Wlasny przepis zapisany w profilu.')}</p>
+          <div class="recipe-meta">
+            <span>${Math.round(numberValue(recipe.calories, 0))} kcal</span>
+            <span>${round1(recipe.protein)} g bialka</span>
+            ${numberValue(recipe.time, 0) ? `<span>${Math.round(numberValue(recipe.time, 0))} min</span>` : ''}
+          </div>
+          <div class="row-actions recipe-actions">
+            <button class="icon-button" type="button" data-recipe-add="${recipe.id}" aria-label="Dodaj ${escapeHTML(recipe.name)} do dziennika" title="Dodaj do dziennika">
+              <i data-lucide="plus"></i>
+            </button>
+            <button class="icon-button" type="button" data-recipe-plan="${recipe.id}" aria-label="Dodaj ${escapeHTML(recipe.name)} do planu" title="Dodaj do planu">
+              <i data-lucide="calendar-plus"></i>
+            </button>
+            <button class="icon-button" type="button" data-recipe-shopping="${recipe.id}" aria-label="Dodaj skladniki ${escapeHTML(recipe.name)} do listy zakupow" title="Dodaj do listy zakupow">
+              <i data-lucide="shopping-basket"></i>
+            </button>
+            <button class="icon-button" type="button" data-recipe-edit="${recipe.id}" aria-label="Edytuj ${escapeHTML(recipe.name)}" title="Edytuj">
+              <i data-lucide="pencil"></i>
+            </button>
+            ${recipe.custom ? `
+              <button class="icon-button" type="button" data-recipe-delete="${recipe.id}" aria-label="Usun ${escapeHTML(recipe.name)}" title="Usun">
+                <i data-lucide="trash-2"></i>
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  function recipeMatchesFilters(recipe) {
+    const query = normalize($('recipe-search') ? $('recipe-search').value : '');
+    const type = $('recipe-type-filter') ? $('recipe-type-filter').value : 'all';
+    const maxCalories = numberValue($('recipe-max-calories') ? $('recipe-max-calories').value : '', null);
+    const minProtein = numberValue($('recipe-min-protein') ? $('recipe-min-protein').value : '', null);
+    const maxTime = numberValue($('recipe-max-time') ? $('recipe-max-time').value : '', null);
+    const searchable = normalize([
+      recipe.name,
+      recipe.description,
+      ...(Array.isArray(recipe.ingredients) ? recipe.ingredients : [])
+    ].join(' '));
+
+    if (query && !searchable.includes(query)) return false;
+    if (type && type !== 'all' && recipeMealType(recipe) !== type) return false;
+    if (maxCalories !== null && numberValue(recipe.calories, 0) > maxCalories) return false;
+    if (minProtein !== null && numberValue(recipe.protein, 0) < minProtein) return false;
+    if (maxTime !== null && numberValue(recipe.time, 0) > maxTime) return false;
+    return true;
+  }
+
+  function recipeMealType(recipe) {
+    const text = normalize(`${recipe.name || ''} ${recipe.description || ''}`);
+    if (text.includes('skyr') || text.includes('jogurt') || text.includes('owsian')) return 'Breakfast';
+    if (text.includes('zupa') || text.includes('salat')) return 'Lunch';
+    if (text.includes('losos') || text.includes('kurczak') || text.includes('obiad')) return 'Dinner';
+    return 'Snack';
+  }
+
+  function clearRecipeFilters() {
+    $('recipe-search').value = '';
+    $('recipe-type-filter').value = 'all';
+    $('recipe-max-calories').value = '';
+    $('recipe-min-protein').value = '';
+    $('recipe-max-time').value = '';
+    renderRecipes();
+  }
+
+  function handleRecipeAction(event) {
+    const add = event.target.closest('[data-recipe-add]');
+    const plan = event.target.closest('[data-recipe-plan]');
+    const shopping = event.target.closest('[data-recipe-shopping]');
+    const edit = event.target.closest('[data-recipe-edit]');
+    const remove = event.target.closest('[data-recipe-delete]');
+
+    if (add) {
+      const recipe = state.recipes.find((item) => item.id === add.dataset.recipeAdd);
+      if (!recipe) return;
+      addRecipeToDiary(recipe);
+      return;
+    }
+
+    if (plan) {
+      const recipe = state.recipes.find((item) => item.id === plan.dataset.recipePlan);
+      if (!recipe) return;
+      recipeToPlannedMeal(recipe, currentDate);
+      return;
+    }
+
+    if (shopping) {
+      const recipe = state.recipes.find((item) => item.id === shopping.dataset.recipeShopping);
+      if (!recipe) return;
+      addRecipeToShoppingList(recipe);
+      return;
+    }
+
+    if (edit) {
+      const recipe = state.recipes.find((item) => item.id === edit.dataset.recipeEdit);
+      if (!recipe) return;
+      $('recipe-id').value = recipe.id;
+      $('recipe-name').value = recipe.name || '';
+      $('recipe-description').value = recipe.description || '';
+      $('recipe-calories').value = numberValue(recipe.calories, 0);
+      $('recipe-protein').value = numberValue(recipe.protein, 0);
+      $('recipe-carbs').value = numberValue(recipe.carbs, 0);
+      $('recipe-fat').value = numberValue(recipe.fat, 0);
+      $('recipe-time').value = recipe.time || '';
+      $('recipe-ingredients').value = Array.isArray(recipe.ingredients) ? recipe.ingredients.join('\n') : '';
+      $('recipe-steps').value = Array.isArray(recipe.steps) ? recipe.steps.join('\n') : '';
+      $('recipe-name').focus();
+      return;
+    }
+
+    if (remove) {
+      const recipe = state.recipes.find((item) => item.id === remove.dataset.recipeDelete);
+      if (!recipe || !recipe.custom || !window.confirm(`Usunac ${recipe.name}?`)) return;
+      state.recipes = state.recipes.filter((item) => item.id !== recipe.id);
+      saveState();
+      render();
+      toast('Przepis usuniety.');
+    }
+  }
+
+  function activeShoppingList() {
+    if (!Array.isArray(state.shoppingLists)) state.shoppingLists = [];
+    let list = state.shoppingLists.find((item) => item.status !== 'archived');
+    if (!list) {
+      list = {
+        id: uid(),
+        name: 'Lista zakupow',
+        items: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      state.shoppingLists.push(list);
+    }
+    if (!Array.isArray(list.items)) list.items = [];
+    return list;
+  }
+
+  function addRecipeToShoppingList(recipe) {
+    const ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
+    if (!ingredients.length) {
+      toast('Ten przepis nie ma skladnikow.');
+      return;
+    }
+    const list = activeShoppingList();
+    ingredients.forEach((ingredient) => {
+      const name = String(ingredient || '').trim();
+      if (!name) return;
+      const existing = list.items.find((item) => normalize(item.name) === normalize(name));
+      if (existing) existing.count = numberValue(existing.count, 1) + 1;
+      else list.items.push({ id: uid(), name, checked: false, count: 1, createdAt: new Date().toISOString() });
+    });
+    list.updatedAt = new Date().toISOString();
+    saveState();
+    renderShoppingList();
+    refreshIcons();
+    toast('Skladniki dodane do listy zakupow.');
+  }
+
+  function renderShoppingList() {
+    const container = $('shopping-list-items');
+    if (!container) return;
+    const list = (state.shoppingLists || []).find((item) => item.status !== 'archived');
+    const items = list && Array.isArray(list.items) ? list.items : [];
+    container.innerHTML = items.length
+      ? items.map((item) => `
+        <label class="shopping-item ${item.checked ? 'is-checked' : ''}">
+          <input type="checkbox" data-shopping-check="${item.id}" ${item.checked ? 'checked' : ''}>
+          <span>${escapeHTML(item.name)}${numberValue(item.count, 1) > 1 ? ` ×${item.count}` : ''}</span>
+          <button class="icon-button" type="button" data-shopping-delete="${item.id}" aria-label="Usun ${escapeHTML(item.name)}" title="Usun">
+            <i data-lucide="x"></i>
+          </button>
+        </label>
+      `).join('')
+      : '<div class="empty-state">Dodaj skladniki z wybranego przepisu.</div>';
+  }
+
+  function handleShoppingListAction(event) {
+    const check = event.target.closest('[data-shopping-check]');
+    const remove = event.target.closest('[data-shopping-delete]');
+    const list = (state.shoppingLists || []).find((item) => item.status !== 'archived');
+    if (!list) return;
+
+    if (check) {
+      const item = list.items.find((entry) => entry.id === check.dataset.shoppingCheck);
+      if (!item) return;
+      item.checked = check.checked;
+      list.updatedAt = new Date().toISOString();
+      saveState();
+      renderShoppingList();
+      refreshIcons();
+      return;
+    }
+
+    if (remove) {
+      list.items = list.items.filter((item) => item.id !== remove.dataset.shoppingDelete);
+      list.updatedAt = new Date().toISOString();
+      saveState();
+      renderShoppingList();
+      refreshIcons();
+    }
+  }
+
+  function clearShoppingList() {
+    const list = (state.shoppingLists || []).find((item) => item.status !== 'archived');
+    if (!list || !list.items.length) return;
+    list.items = [];
+    list.updatedAt = new Date().toISOString();
+    saveState();
+    renderShoppingList();
+    refreshIcons();
+    toast('Lista zakupow wyczyszczona.');
   }
 
   function handlePaidRecipeAction(event) {
@@ -2145,6 +3080,200 @@
     toast('Cele zapisane.');
   }
 
+  function renderSettings() {
+    $('target-calories').value = state.settings.calories;
+    $('target-protein').value = state.settings.protein;
+    $('target-carbs').value = state.settings.carbs;
+    $('target-fat').value = state.settings.fat;
+    $('target-water').value = state.settings.water;
+
+    const goals = { ...defaultState.habitGoals, ...(state.habitGoals || {}) };
+    $('habit-logging-days').value = goals.loggingDays;
+    $('habit-water-days').value = goals.waterDays;
+    $('habit-weigh-days').value = goals.weighDays;
+    $('habit-protein-days').value = goals.proteinDays;
+    $('habit-reminder-morning').checked = Boolean(goals.reminderMorning);
+    $('habit-reminder-evening').checked = Boolean(goals.reminderEvening);
+  }
+
+  function saveHabitGoals(event) {
+    event.preventDefault();
+    state.habitGoals = {
+      loggingDays: clampInt($('habit-logging-days').value, 1, 7, 5),
+      waterDays: clampInt($('habit-water-days').value, 1, 7, 5),
+      weighDays: clampInt($('habit-weigh-days').value, 1, 7, 3),
+      proteinDays: clampInt($('habit-protein-days').value, 1, 7, 5),
+      reminderMorning: $('habit-reminder-morning').checked,
+      reminderEvening: $('habit-reminder-evening').checked
+    };
+    saveState();
+    scheduleLocalReminders();
+    render();
+    toast('Cele tygodniowe zapisane.');
+  }
+
+  function clampInt(value, min, max, fallback) {
+    const parsed = Math.round(numberValue(value, fallback));
+    return Math.max(min, Math.min(max, parsed));
+  }
+
+  function habitGoalStats() {
+    const dates = lastNDates(7, currentDate);
+    const goals = { ...defaultState.habitGoals, ...(state.habitGoals || {}) };
+    const loggedDays = dates.filter((date) => totalsForDate(date).calories > 0).length;
+    const waterDays = dates.filter((date) => {
+      const water = state.water.find((item) => item.date === date);
+      return numberValue(water && water.ml, 0) >= state.settings.water * 0.7;
+    }).length;
+    const weighDays = dates.filter((date) => state.weights.some((item) => item.date === date)).length;
+    const proteinDays = dates.filter((date) => totalsForDate(date).protein >= state.settings.protein * 0.8).length;
+    return [
+      { key: 'logging', label: 'Dni z wpisami', value: loggedDays, target: goals.loggingDays, icon: 'notebook-tabs' },
+      { key: 'water', label: 'Woda', value: waterDays, target: goals.waterDays, icon: 'droplet' },
+      { key: 'weigh', label: 'Wazenie', value: weighDays, target: goals.weighDays, icon: 'scale' },
+      { key: 'protein', label: 'Bialko', value: proteinDays, target: goals.proteinDays, icon: 'egg' }
+    ];
+  }
+
+  function renderHabitGoalProgress() {
+    const container = $('habit-goal-progress');
+    if (!container) return;
+    container.innerHTML = habitGoalStats().map((goal) => {
+      const percent = goal.target > 0 ? Math.min(100, Math.round((goal.value / goal.target) * 100)) : 0;
+      return `
+        <div class="habit-goal-row">
+          <span><i data-lucide="${goal.icon}"></i>${goal.label}</span>
+          <strong>${goal.value}/${goal.target}</strong>
+          <div class="mini-meter"><span style="width:${percent}%"></span></div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderWeeklyReview() {
+    const review = buildWeeklyReview(7);
+    const grid = $('weekly-review-grid');
+    const note = $('weekly-review-note');
+    if (!grid || !note) return;
+    $('weekly-review-range').textContent = '7 dni';
+    grid.innerHTML = review.cards.map((card) => `
+      <article class="weekly-review-card">
+        <span>${card.label}</span>
+        <strong>${card.value}</strong>
+        <small>${card.detail}</small>
+      </article>
+    `).join('');
+    note.textContent = review.note;
+    if (!state.weeklyReviews || typeof state.weeklyReviews !== 'object' || Array.isArray(state.weeklyReviews)) {
+      state.weeklyReviews = {};
+    }
+    if (!state.weeklyReviews[review.key]) state.weeklyReviews[review.key] = review;
+  }
+
+  function buildWeeklyReview(days) {
+    const dates = lastNDates(days, currentDate);
+    const calories = dates.map((date) => totalsForDate(date).calories);
+    const logged = calories.filter((value) => value > 0);
+    const avgCalories = logged.length ? logged.reduce((sum, value) => sum + value, 0) / logged.length : 0;
+    const waters = dates.map((date) => numberValue((state.water.find((item) => item.date === date) || {}).ml, 0)).filter((value) => value > 0);
+    const avgWater = waters.length ? waters.reduce((sum, value) => sum + value, 0) / waters.length : 0;
+    const weights = [...state.weights]
+      .filter((item) => item.date >= dates[0] && item.date <= currentDate)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const weightDelta = weights.length >= 2 ? weights[weights.length - 1].weight - weights[0].weight : null;
+    const best = dates
+      .map((date) => ({ date, totals: totalsForDate(date) }))
+      .filter((item) => item.totals.calories > 0)
+      .sort((a, b) => Math.abs(state.settings.calories - a.totals.calories) - Math.abs(state.settings.calories - b.totals.calories))[0];
+    const biggestGap = Math.max(0, ...dates.map((date) => Math.max(0, state.settings.calories - totalsForDate(date).calories)));
+    const proteinDays = dates.filter((date) => totalsForDate(date).protein >= state.settings.protein * 0.8).length;
+
+    const note = logged.length
+      ? `Dzialalo: ${logged.length} dni z wpisami i ${proteinDays} dni blisko celu bialka. Do poprawy: najwieksza luka kalorii to okolo ${Math.round(biggestGap)} kcal, wiec zaplanuj awaryjna przekaske.`
+      : 'Ten tydzien nie ma jeszcze wpisow. Zacznij od prostego planu na pierwszy posilek i jednej szklanki wody.';
+
+    return {
+      key: `${dates[0]}:${currentDate}`,
+      createdAt: new Date().toISOString(),
+      cards: [
+        { label: 'Srednie kcal', value: Math.round(avgCalories), detail: `${logged.length}/${days} dni z wpisami` },
+        { label: 'Srednia woda', value: formatLiters(avgWater), detail: waters.length ? `${waters.length} dni z pomiarem` : 'Brak pomiarow' },
+        { label: 'Trend wagi', value: weightDelta === null ? '-' : `${weightDelta > 0 ? '+' : ''}${round1(weightDelta)} kg`, detail: weights.length ? `${weights.length} pomiarow` : 'Brak wag' },
+        { label: 'Najlepszy dzien', value: best ? shortDate(best.date) : '-', detail: best ? `${Math.round(best.totals.calories)} kcal` : 'Brak danych' },
+        { label: 'Najwieksza luka', value: `${Math.round(biggestGap)} kcal`, detail: 'Do celu kcal' },
+        { label: 'Bialko', value: `${proteinDays}/${days}`, detail: 'Dni blisko celu' }
+      ],
+      note
+    };
+  }
+
+  function renderSyncMeta() {
+    const container = $('sync-meta');
+    if (!container) return;
+    const lastSync = localStorage.getItem(lastSyncKey(currentProfileId));
+    const backup = state.backupMeta;
+    container.innerHTML = `
+      <div><span>Ostatnia synchronizacja</span><strong>${lastSync ? formatDateTime(lastSync) : 'Brak'}</strong></div>
+      <div><span>Rewizja chmury</span><strong>${lastRemoteRevision || 0}</strong></div>
+      <div><span>Ostatni backup JSON</span><strong>${backup && backup.createdAt ? formatDateTime(backup.createdAt) : 'Brak'}</strong></div>
+    `;
+  }
+
+  function createLocalBackup(reason) {
+    const createdAt = new Date().toISOString();
+    const key = `${backupKey(currentProfileId)}:${Date.now()}`;
+    const payload = {
+      reason,
+      createdAt,
+      profileId: currentProfileId,
+      data: structuredCloneSafe(state)
+    };
+    try {
+      localStorage.setItem(key, JSON.stringify(payload));
+      state.backupMeta = { key, reason, createdAt };
+    } catch (error) {
+      console.warn('Backup lokalny nie zostal zapisany', error);
+      state.backupMeta = { reason, createdAt, error: error.message };
+    }
+  }
+
+  function scheduleLocalReminders() {
+    window.clearInterval(reminderTimer);
+    const goals = state.habitGoals || {};
+    if (!goals.reminderMorning && !goals.reminderEvening) return;
+    reminderTimer = window.setInterval(checkLocalReminder, 60000);
+    checkLocalReminder();
+  }
+
+  function checkLocalReminder() {
+    const goals = state.habitGoals || {};
+    const now = new Date();
+    const hour = now.getHours();
+    const day = todayISO();
+    const key = `diet-studio:reminder:${day}:${hour}`;
+    if (localStorage.getItem(key)) return;
+
+    if (goals.reminderMorning && hour === 8) {
+      localStorage.setItem(key, '1');
+      toast('Przypomnienie: zaplanuj pierwszy posilek dnia.');
+    }
+    if (goals.reminderEvening && hour === 20) {
+      localStorage.setItem(key, '1');
+      toast('Przypomnienie: uzupelnij dziennik wieczorem.');
+    }
+  }
+
+  function formatDateTime(iso) {
+    const date = new Date(iso);
+    if (Number.isNaN(date.valueOf())) return '-';
+    return date.toLocaleString('pl-PL', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
   function renderStorageNote() {
     const entryCount = state.entries.length;
     const foodCount = state.foods.length;
@@ -2331,6 +3460,7 @@
 
   function commitImport() {
     if (!importState) return;
+    createLocalBackup('import');
 
     const mapping = currentMapping();
     let entryCount = 0;
@@ -2443,8 +3573,10 @@
       ...((state && state.deletedEntryIds) || []),
       ...((state && state.entries) || []).map((entry) => entry.id)
     ]);
+    createLocalBackup('reset');
+    const backupMeta = state.backupMeta;
     localStorage.removeItem(storageKey(currentProfileId));
-    state = normalizeState({ ...structuredCloneSafe(defaultState), deletedEntryIds });
+    state = normalizeState({ ...structuredCloneSafe(defaultState), deletedEntryIds, backupMeta });
     currentDate = todayISO();
     clearImport();
     saveState();
@@ -3090,8 +4222,25 @@
       dailyCoach: rawState && rawState.dailyCoach && typeof rawState.dailyCoach === 'object' && !Array.isArray(rawState.dailyCoach)
         ? rawState.dailyCoach
         : {},
-      deletedEntryIds: Array.isArray(rawState && rawState.deletedEntryIds) ? uniqueStrings(rawState.deletedEntryIds) : []
+      deletedEntryIds: Array.isArray(rawState && rawState.deletedEntryIds) ? uniqueStrings(rawState.deletedEntryIds) : [],
+      mealTemplates: Array.isArray(rawState && rawState.mealTemplates) ? rawState.mealTemplates : [],
+      plannedMeals: Array.isArray(rawState && rawState.plannedMeals) ? rawState.plannedMeals : [],
+      shoppingLists: Array.isArray(rawState && rawState.shoppingLists) ? rawState.shoppingLists : [],
+      weeklyReviews: rawState && rawState.weeklyReviews && typeof rawState.weeklyReviews === 'object' && !Array.isArray(rawState.weeklyReviews)
+        ? rawState.weeklyReviews
+        : {},
+      habitGoals: { ...defaultState.habitGoals, ...((rawState && rawState.habitGoals) || {}) },
+      undoStack: trimUndoStack(Array.isArray(rawState && rawState.undoStack) ? rawState.undoStack : []),
+      backupMeta: rawState && rawState.backupMeta && typeof rawState.backupMeta === 'object' && !Array.isArray(rawState.backupMeta)
+        ? rawState.backupMeta
+        : null
     };
+  }
+
+  function trimUndoStack(items) {
+    return (Array.isArray(items) ? items : [])
+      .filter((item) => item && item.type && item.createdAt)
+      .slice(-8);
   }
 
   function loadState(profileId = currentProfileId) {
