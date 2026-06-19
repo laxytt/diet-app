@@ -156,6 +156,8 @@
   let remoteSaveTimer = 0;
   let remoteSaveInFlight = null;
   let pendingRemoteSave = false;
+  let remoteConflictCooldownUntil = 0;
+  let remoteConflictCount = 0;
   let profileLoadPromise = null;
   let supabaseClient = null;
   let syncSession = null;
@@ -878,6 +880,7 @@
 
   function scheduleRemoteSave() {
     if (!canSync() || !currentProfileAssignment || isRemoteLoading || !remoteReady) return;
+    if (Date.now() < remoteConflictCooldownUntil) return;
     clearTimeout(remoteSaveTimer);
     const profileId = currentProfileId;
     const snapshot = structuredCloneSafe(state);
@@ -890,6 +893,7 @@
     if (!canSync()) return;
     if (!currentProfileAssignment || currentProfileAssignment.profile_id !== profileId) return;
     if (!remoteReady) return;
+    if (Date.now() < remoteConflictCooldownUntil) return;
 
     if (remoteSaveInFlight) {
       pendingRemoteSave = true;
@@ -946,6 +950,7 @@
       }
 
       setRemoteRevision(profile.id, numberValue(data && data.revision, nextRevision));
+      markRemoteSaveHealthy();
       syncLocalStateAfterRemoteSave(profile.id, snapshot, merged);
       return;
     }
@@ -972,6 +977,7 @@
     if (!updated) return handleRemoteSaveConflict(profileId, merged, attempt);
 
     setRemoteRevision(profile.id, numberValue(updated.revision, nextRevision));
+    markRemoteSaveHealthy();
     syncLocalStateAfterRemoteSave(profile.id, snapshot, merged);
   }
 
@@ -1004,8 +1010,25 @@
       return saveRemoteProfileInternal(profileId, nextSnapshot, attempt + 1);
     }
 
+    pauseRemoteConflictSaves();
     pendingRemoteSave = false;
     updateSyncUI();
+  }
+
+  function markRemoteSaveHealthy() {
+    remoteConflictCount = 0;
+    remoteConflictCooldownUntil = 0;
+  }
+
+  function pauseRemoteConflictSaves() {
+    remoteConflictCount = Math.min(remoteConflictCount + 1, 5);
+    const cooldown = Math.min(60000, 8000 * remoteConflictCount);
+    remoteConflictCooldownUntil = Date.now() + cooldown;
+    window.setTimeout(() => {
+      if (Date.now() >= remoteConflictCooldownUntil && canSync() && remoteReady) {
+        scheduleRemoteSave();
+      }
+    }, cooldown + 250);
   }
 
   function syncLocalStateAfterRemoteSave(profileId, snapshot, merged) {
@@ -5011,6 +5034,11 @@
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
     if (!/^https?:$/.test(window.location.protocol)) return;
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then((registration) => {
+      registration.update().catch(() => {});
+      if (registration.waiting) {
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+    }).catch(() => {});
   }
 })();
