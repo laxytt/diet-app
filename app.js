@@ -169,6 +169,7 @@
   const signupModes = { gate: false };
   let sessionRefreshPromise = null;
   let reminderTimer = 0;
+  let mobileAccordionPrepared = false;
 
   const $ = (id) => document.getElementById(id);
 
@@ -178,6 +179,7 @@
     bindEvents();
     initSupabaseClient();
     updateManualControls();
+    setupMobileAccordions();
     $('selected-date').value = currentDate;
     $('xlsx-status').textContent = window.XLSX ? 'Parser Excela gotowy' : 'CSV gotowe';
     updateSyncUI();
@@ -191,8 +193,22 @@
   }
 
   function bindEvents() {
-    document.querySelectorAll('.tab-button').forEach((button) => {
-      button.addEventListener('click', () => switchView(button.dataset.view));
+    document.querySelectorAll('.tab-button[data-view], .mobile-more-menu [data-view]').forEach((button) => {
+      button.addEventListener('click', () => {
+        switchView(button.dataset.view);
+        closeMobileMoreMenu();
+      });
+    });
+
+    const mobileMoreButton = $('mobile-more-button');
+    if (mobileMoreButton) {
+      mobileMoreButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleMobileMoreMenu();
+      });
+    }
+    document.addEventListener('click', (event) => {
+      if (!event.target.closest('#mobile-more-menu') && !event.target.closest('#mobile-more-button')) closeMobileMoreMenu();
     });
 
     $('prev-day').addEventListener('click', () => shiftDate(-1));
@@ -331,6 +347,7 @@
     $('clear-import').addEventListener('click', clearImport);
 
     window.addEventListener('resize', () => {
+      setupMobileAccordions();
       clearTimeout(chartTimer);
       chartTimer = window.setTimeout(renderCharts, 120);
     });
@@ -381,9 +398,12 @@
   }
 
   function switchView(view) {
-    document.querySelectorAll('.tab-button').forEach((button) => {
+    const moreViews = ['recipes', 'trends', 'import', 'settings'];
+    document.querySelectorAll('.tab-button[data-view]').forEach((button) => {
       button.classList.toggle('active', button.dataset.view === view);
     });
+    const moreButton = $('mobile-more-button');
+    if (moreButton) moreButton.classList.toggle('active', moreViews.includes(view));
     document.querySelectorAll('.view').forEach((panel) => {
       panel.classList.toggle('active', panel.id === `view-${view}`);
     });
@@ -391,6 +411,35 @@
       renderCharts();
       refreshIcons();
     });
+  }
+
+  function toggleMobileMoreMenu() {
+    const menu = $('mobile-more-menu');
+    const button = $('mobile-more-button');
+    if (!menu || !button) return;
+    const willOpen = menu.hidden;
+    menu.hidden = !willOpen;
+    button.setAttribute('aria-expanded', String(willOpen));
+  }
+
+  function closeMobileMoreMenu() {
+    const menu = $('mobile-more-menu');
+    const button = $('mobile-more-button');
+    if (!menu || !button) return;
+    menu.hidden = true;
+    button.setAttribute('aria-expanded', 'false');
+  }
+
+  function setupMobileAccordions() {
+    const compact = window.matchMedia('(max-width: 699px)').matches;
+    document.querySelectorAll('.mobile-accordion').forEach((details) => {
+      if (!compact) {
+        details.open = true;
+        return;
+      }
+      if (!mobileAccordionPrepared) details.open = false;
+    });
+    mobileAccordionPrepared = compact;
   }
 
   async function switchProfile(profileId) {
@@ -2549,15 +2598,22 @@
           <button class="icon-button" type="button" data-food-add="${food.id}" aria-label="Dodaj ${escapeHTML(food.name)}" title="Dodaj">
             <i data-lucide="plus"></i>
           </button>
-          <button class="icon-button" type="button" data-food-edit="${food.id}" aria-label="Edytuj ${escapeHTML(food.name)}" title="Edytuj">
-            <i data-lucide="pencil"></i>
-          </button>
-          <button class="icon-button" type="button" data-food-favorite="${food.id}" aria-label="Ulubione ${escapeHTML(food.name)}" title="Ulubione">
-            <i data-lucide="star"></i>
-          </button>
-          <button class="icon-button" type="button" data-food-delete="${food.id}" aria-label="Usuń ${escapeHTML(food.name)}" title="Usuń">
-            <i data-lucide="trash-2"></i>
-          </button>
+          <div class="mobile-action-menu">
+            <button class="icon-button" type="button" data-food-menu aria-label="Więcej akcji dla ${escapeHTML(food.name)}" title="Więcej">
+              <i data-lucide="ellipsis"></i>
+            </button>
+            <div class="mobile-action-menu-items">
+              <button class="icon-button" type="button" data-food-edit="${food.id}" aria-label="Edytuj ${escapeHTML(food.name)}" title="Edytuj">
+                <i data-lucide="pencil"></i>
+              </button>
+              <button class="icon-button" type="button" data-food-favorite="${food.id}" aria-label="Ulubione ${escapeHTML(food.name)}" title="Ulubione">
+                <i data-lucide="star"></i>
+              </button>
+              <button class="icon-button" type="button" data-food-delete="${food.id}" aria-label="Usuń ${escapeHTML(food.name)}" title="Usuń">
+                <i data-lucide="trash-2"></i>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     `;

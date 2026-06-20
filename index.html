@@ -126,23 +126,33 @@
           <i data-lucide="database"></i>
           <span>Produkty</span>
         </button>
-        <button class="tab-button" type="button" data-view="recipes">
+        <button class="tab-button mobile-extra-tab" type="button" data-view="recipes">
           <i data-lucide="utensils"></i>
           <span>Przepisy</span>
         </button>
-        <button class="tab-button" type="button" data-view="trends">
+        <button class="tab-button mobile-extra-tab" type="button" data-view="trends">
           <i data-lucide="chart-line"></i>
           <span>Trendy</span>
         </button>
-        <button class="tab-button" type="button" data-view="import">
+        <button class="tab-button mobile-extra-tab" type="button" data-view="import">
           <i data-lucide="file-spreadsheet"></i>
           <span>Import</span>
         </button>
-        <button class="tab-button" type="button" data-view="settings">
+        <button class="tab-button mobile-extra-tab" type="button" data-view="settings">
           <i data-lucide="sliders-horizontal"></i>
           <span>Ustawienia</span>
         </button>
+              <button class="tab-button mobile-more-tab" id="mobile-more-button" type="button" aria-expanded="false" aria-controls="mobile-more-menu">
+          <i data-lucide="ellipsis"></i>
+          <span>Więcej</span>
+        </button>
       </nav>
+      <div class="mobile-more-menu" id="mobile-more-menu" hidden>
+        <button type="button" data-view="recipes"><i data-lucide="utensils"></i>Przepisy</button>
+        <button type="button" data-view="trends"><i data-lucide="chart-line"></i>Trendy</button>
+        <button type="button" data-view="import"><i data-lucide="file-spreadsheet"></i>Import</button>
+        <button type="button" data-view="settings"><i data-lucide="sliders-horizontal"></i>Ustawienia</button>
+      </div>
 
       <main id="main-content">
         <section class="view active" id="view-dashboard">
@@ -350,6 +360,9 @@
                 </button>
               </form>
 
+              <details class="mobile-accordion advanced-entry-tools" open>
+                <summary><i data-lucide="sliders-horizontal"></i> Pełny formularz i AI</summary>
+
               <form id="entry-form" class="entry-form">
                 <label>
                   <span>Posiłek</span>
@@ -432,6 +445,7 @@
                 </div>
                 <div id="ai-result" class="ai-result"></div>
               </div>
+              </details>
             </div>
 
             <div class="panel diary-panel">
@@ -451,7 +465,8 @@
               <div id="meal-groups" class="meal-groups"></div>
             </div>
 
-            <div class="panel side-panel">
+            <details class="panel side-panel mobile-accordion" open>
+              <summary><i data-lucide="activity"></i> Pomiary i aktywność</summary>
               <div class="panel-heading">
                 <h2>Pomiary</h2>
               </div>
@@ -518,7 +533,7 @@
                 </form>
                 <div id="activity-list" class="activity-list"></div>
               </div>
-            </div>
+            </details>
           </section>
 
           <section class="quick-tools-grid">
