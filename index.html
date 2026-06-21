@@ -94,10 +94,20 @@
               <span>Email</span>
               <input id="gate-auth-email" type="email" autocomplete="email" placeholder="email@domena.pl">
             </label>
-            <label class="wide">
+            <label class="wide" id="gate-auth-password-field">
               <span>Hasło</span>
               <input id="gate-auth-password" type="password" autocomplete="current-password" placeholder="Hasło">
             </label>
+            <div class="recovery-field recovery-password-grid wide" hidden>
+              <label>
+                <span>Nowe hasło</span>
+                <input id="gate-new-password" type="password" autocomplete="new-password" placeholder="Min. 6 znaków">
+              </label>
+              <label>
+                <span>Powtórz nowe hasło</span>
+                <input id="gate-new-password-confirm" type="password" autocomplete="new-password" placeholder="Powtórz hasło">
+              </label>
+            </div>
             <div class="signup-field signup-profile-grid wide" hidden>
               <label>
                 <span>Wiek (opcjonalnie)</span>
@@ -130,6 +140,14 @@
               <button class="secondary-button google-button" id="gate-google-button" type="button">
                 <span class="google-mark" aria-hidden="true">G</span>
                 Zaloguj przez Google
+              </button>
+              <button class="ghost-button auth-forgot-button" id="gate-forgot-button" type="button">
+                <i data-lucide="key-round"></i>
+                Nie pamiętasz hasła?
+              </button>
+              <button class="ghost-button auth-back-button" id="gate-auth-back-button" type="button" hidden>
+                <i data-lucide="arrow-left"></i>
+                Wróć do logowania
               </button>
               <button class="ghost-button auth-resend-button" id="gate-resend-button" type="button" hidden>
                 <i data-lucide="mail-check"></i>

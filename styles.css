@@ -621,13 +621,16 @@ select:focus {
 
 .auth-gate-panel .primary-button,
 .auth-gate-panel .secondary-button,
-.auth-gate-panel .auth-resend-button {
+.auth-gate-panel .auth-resend-button,
+.auth-gate-panel .auth-forgot-button,
+.auth-gate-panel .auth-back-button {
   width: 100%;
   min-height: 46px;
   justify-content: center;
 }
 
-.signup-profile-grid {
+.signup-profile-grid,
+.recovery-password-grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: 10px;
@@ -2234,6 +2237,10 @@ th {
   }
 
   .signup-profile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .recovery-password-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

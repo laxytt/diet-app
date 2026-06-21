@@ -168,6 +168,7 @@
   let lastRemoteRevision = loadRemoteRevision(currentProfileId);
   let isAuthInitializing = true;
   let authMode = 'login';
+  let passwordRecoveryMode = false;
   let sessionRefreshPromise = null;
   let reminderTimer = 0;
   let mobileAccordionPrepared = false;
@@ -237,6 +238,12 @@
     $('auth-login-tab').addEventListener('click', () => setAuthMode('login'));
     $('auth-register-tab').addEventListener('click', () => setAuthMode('register'));
     $('gate-google-button').addEventListener('click', loginWithGoogle);
+    $('gate-forgot-button').addEventListener('click', () => setAuthMode('reset'));
+    $('gate-auth-back-button').addEventListener('click', () => {
+      passwordRecoveryMode = false;
+      setAuthMode('login');
+      updateSyncUI();
+    });
     $('gate-resend-button').addEventListener('click', resendSignupEmail);
     $('quick-entry-form').addEventListener('submit', addQuickEntry);
     $('reset-entry-form').addEventListener('click', resetEntryFormWithUndo);
@@ -521,6 +528,10 @@
     });
     supabaseClient.auth.onAuthStateChange(async (_event, session) => {
       syncSession = session;
+      if (_event === 'PASSWORD_RECOVERY') {
+        passwordRecoveryMode = true;
+        setAuthMode('update-password');
+      }
       if (isAuthInitializing) {
         updateSyncUI();
         renderProfileBadge();
@@ -553,6 +564,7 @@
     const params = new URLSearchParams(window.location.hash.slice(1));
     const accessToken = params.get('access_token');
     const refreshToken = params.get('refresh_token');
+    const type = params.get('type');
     if (!accessToken || !refreshToken) return;
 
     const { data, error } = await supabaseClient.auth.setSession({
@@ -564,6 +576,10 @@
       return;
     }
     syncSession = data.session;
+    if (type === 'recovery') {
+      passwordRecoveryMode = true;
+      setAuthMode('update-password');
+    }
     window.history.replaceState(null, document.title, authRedirectUrl());
   }
 
@@ -596,7 +612,7 @@
 
     syncStatus.classList.remove('online', 'error');
     if (logoutButton) logoutButton.hidden = !syncSession;
-    const locked = Boolean(supabaseClient && (isAuthInitializing || !syncSession || !currentProfileAssignment));
+    const locked = Boolean(supabaseClient && (isAuthInitializing || passwordRecoveryMode || !syncSession || !currentProfileAssignment));
     if (appShell) appShell.classList.toggle('locked', locked);
     if (appShell) appShell.classList.toggle('auth-mode', locked);
     if (appShell) appShell.classList.toggle('auth-loading', Boolean(supabaseClient && isAuthInitializing));
@@ -630,6 +646,8 @@
   }
 
   function submitAuthForm(event) {
+    if (authMode === 'reset') return requestPasswordReset(event);
+    if (authMode === 'update-password') return updatePasswordFromRecovery(event);
     if (authMode === 'register') return signUpUser(event);
     return loginUser(event);
   }
@@ -668,6 +686,7 @@
       return;
     }
     syncSession = data.session;
+    passwordRecoveryMode = false;
     updateSyncUI();
     await loadAssignedProfile();
     setAuthBusy(source, false);
@@ -766,6 +785,87 @@
     toast(data.session ? 'Konto utworzone i zalogowane.' : 'Konto utworzone. Sprawdź skrzynkę, spam i oferty. Możesz też wysłać potwierdzenie ponownie.');
   }
 
+  async function requestPasswordReset(event) {
+    if (event) event.preventDefault();
+    if (!supabaseClient) {
+      toast('Najpierw skonfiguruj Supabase w config.js.');
+      return;
+    }
+
+    const source = 'gate';
+    const { email } = readAuthCredentials(source);
+    if (!email) {
+      toast('Wpisz email, na który wysłać link resetu hasła.');
+      return;
+    }
+
+    setAuthBusy(source, true, 'Wysyłam link...', 'reset');
+    const { error } = await withTimeout(
+      supabaseClient.auth.resetPasswordForEmail(email, {
+        redirectTo: authRedirectUrl()
+      }),
+      12000,
+      'Wysyłanie linku resetu trwa za długo. Spróbuj ponownie.'
+    ).catch((timeoutError) => ({ error: timeoutError }));
+    setAuthBusy(source, false);
+
+    if (error) {
+      toast(`Nie udało się wysłać resetu hasła: ${error.message}`);
+      return;
+    }
+    toast('Wysłaliśmy link resetu hasła. Sprawdź skrzynkę, spam i oferty.');
+  }
+
+  async function updatePasswordFromRecovery(event) {
+    if (event) event.preventDefault();
+    if (!supabaseClient) {
+      toast('Najpierw skonfiguruj Supabase w config.js.');
+      return;
+    }
+    if (!syncSession) {
+      toast('Link resetu wygasł albo nie został poprawnie otwarty. Wyślij reset hasła ponownie.');
+      setAuthMode('reset');
+      return;
+    }
+
+    const password = $('gate-new-password').value;
+    const confirm = $('gate-new-password-confirm').value;
+    if (!password || !confirm) {
+      toast('Wpisz i powtórz nowe hasło.');
+      return;
+    }
+    if (password.length < 6) {
+      toast('Nowe hasło musi mieć co najmniej 6 znaków.');
+      return;
+    }
+    if (password !== confirm) {
+      toast('Hasła nie są takie same.');
+      return;
+    }
+
+    const source = 'gate';
+    setAuthBusy(source, true, 'Zapisuję hasło...', 'update-password');
+    const { error } = await withTimeout(
+      supabaseClient.auth.updateUser({ password }),
+      12000,
+      'Zmiana hasła trwa za długo. Spróbuj ponownie.'
+    ).catch((timeoutError) => ({ error: timeoutError }));
+    if (error) {
+      setAuthBusy(source, false);
+      toast(`Nie udało się zmienić hasła: ${error.message}`);
+      return;
+    }
+
+    passwordRecoveryMode = false;
+    $('gate-new-password').value = '';
+    $('gate-new-password-confirm').value = '';
+    if (canSync()) await loadAssignedProfile();
+    setAuthBusy(source, false);
+    setAuthMode('login');
+    updateSyncUI();
+    toast(currentProfileAssignment ? 'Hasło zmienione. Jesteś zalogowana.' : 'Hasło zmienione, ale ten email nie ma przypisanego profilu diety.');
+  }
+
   async function resendSignupEmail(event) {
     if (event) event.preventDefault();
     if (!supabaseClient) {
@@ -800,11 +900,16 @@
   }
 
   function setAuthMode(mode) {
-    authMode = mode === 'register' ? 'register' : 'login';
+    authMode = ['register', 'reset', 'update-password'].includes(mode) ? mode : 'login';
     const isRegister = authMode === 'register';
+    const isReset = authMode === 'reset';
+    const isUpdatePassword = authMode === 'update-password';
+    const isLogin = authMode === 'login';
     const prefix = 'gate-';
     const usernameInput = $(`${prefix}auth-username`);
     const passwordInput = $(`${prefix}auth-password`);
+    const passwordField = $('gate-auth-password-field');
+    const modeSwitch = document.querySelector('.auth-mode-switch');
     const loginTab = $('auth-login-tab');
     const registerTab = $('auth-register-tab');
     const title = $('auth-title');
@@ -812,44 +917,69 @@
     const note = $('gate-auth-note');
     const primaryButton = $('gate-login-button');
     const googleButton = $('gate-google-button');
+    const forgotButton = $('gate-forgot-button');
+    const backButton = $('gate-auth-back-button');
     const resendButton = $('gate-resend-button');
     document.querySelectorAll('.signup-field').forEach((element) => {
       element.hidden = !isRegister;
     });
+    document.querySelectorAll('.recovery-field').forEach((element) => {
+      element.hidden = !isUpdatePassword;
+    });
+    if (modeSwitch) modeSwitch.hidden = isReset || isUpdatePassword;
     if (usernameInput) {
       usernameInput.required = isRegister;
       usernameInput.setAttribute('autocomplete', 'name');
     }
-    if (passwordInput) passwordInput.setAttribute('autocomplete', isRegister ? 'new-password' : 'current-password');
+    if (passwordField) passwordField.hidden = isReset || isUpdatePassword;
+    if (passwordInput) {
+      passwordInput.required = isLogin || isRegister;
+      passwordInput.setAttribute('autocomplete', isRegister ? 'new-password' : 'current-password');
+    }
     if (loginTab) {
-      loginTab.classList.toggle('is-active', !isRegister);
-      loginTab.setAttribute('aria-selected', String(!isRegister));
+      loginTab.classList.toggle('is-active', isLogin);
+      loginTab.setAttribute('aria-selected', String(isLogin));
+      loginTab.hidden = isUpdatePassword;
     }
     if (registerTab) {
       registerTab.classList.toggle('is-active', isRegister);
       registerTab.setAttribute('aria-selected', String(isRegister));
+      registerTab.hidden = isUpdatePassword;
     }
-    if (title) title.textContent = isRegister ? 'Utwórz konto' : 'Zaloguj się';
+    if (title) {
+      title.textContent = isUpdatePassword
+        ? 'Ustaw nowe hasło'
+        : (isReset ? 'Reset hasła' : (isRegister ? 'Utwórz konto' : 'Zaloguj się'));
+    }
     if (subtitle) {
       subtitle.textContent = isRegister
         ? 'Załóż konto i uzupełnij opcjonalnie podstawowe dane.'
-        : 'Wróć do swojego profilu i synchronizacji.';
+        : (isReset
+          ? 'Wyślemy link do ustawienia nowego hasła.'
+          : (isUpdatePassword ? 'Wpisz nowe hasło do konta.' : 'Wróć do swojego profilu i synchronizacji.'));
     }
     if (note) {
       note.textContent = isRegister
         ? 'Po rejestracji wyślemy mail potwierdzający. Sprawdź też spam i oferty.'
-        : 'Nie masz konta? Przełącz na rejestrację powyżej.';
+        : (isReset
+          ? 'Po kliknięciu linku z maila wrócisz tutaj, żeby ustawić nowe hasło.'
+          : (isUpdatePassword ? 'Po zapisaniu hasła aplikacja wróci do profilu.' : 'Nie masz konta? Przełącz na rejestrację powyżej.'));
     }
     if (primaryButton) {
-      primaryButton.innerHTML = isRegister
-        ? '<i data-lucide="user-plus"></i> Zarejestruj'
-        : '<i data-lucide="log-in"></i> Zaloguj';
+      primaryButton.innerHTML = isUpdatePassword
+        ? '<i data-lucide="save"></i> Zapisz nowe hasło'
+        : (isReset
+          ? '<i data-lucide="mail"></i> Wyślij link resetu'
+          : (isRegister ? '<i data-lucide="user-plus"></i> Zarejestruj' : '<i data-lucide="log-in"></i> Zaloguj'));
     }
     if (googleButton) {
+      googleButton.hidden = isReset || isUpdatePassword;
       googleButton.innerHTML = isRegister
         ? '<span class="google-mark" aria-hidden="true">G</span> Zarejestruj przez Google'
         : '<span class="google-mark" aria-hidden="true">G</span> Zaloguj przez Google';
     }
+    if (forgotButton) forgotButton.hidden = !isLogin;
+    if (backButton) backButton.hidden = isLogin || isUpdatePassword;
     if (resendButton) {
       resendButton.hidden = !isRegister;
     }
@@ -915,12 +1045,16 @@
   function setAuthBusy(source, busy, label = 'Loguję...', action = 'login') {
     const loginButton = $('gate-login-button');
     const googleButton = $('gate-google-button');
+    const forgotButton = $('gate-forgot-button');
+    const backButton = $('gate-auth-back-button');
     const resendButton = $('gate-resend-button');
     const loginTab = $('auth-login-tab');
     const registerTab = $('auth-register-tab');
-    const defaultPrimary = authMode === 'register'
-      ? '<i data-lucide="user-plus"></i> Zarejestruj'
-      : '<i data-lucide="log-in"></i> Zaloguj';
+    const defaultPrimary = authMode === 'update-password'
+      ? '<i data-lucide="save"></i> Zapisz nowe hasło'
+      : (authMode === 'reset'
+        ? '<i data-lucide="mail"></i> Wyślij link resetu'
+        : (authMode === 'register' ? '<i data-lucide="user-plus"></i> Zarejestruj' : '<i data-lucide="log-in"></i> Zaloguj'));
     if (loginButton) {
       loginButton.disabled = busy;
       loginButton.innerHTML = busy && action !== 'resend'
@@ -934,6 +1068,8 @@
         : '<i data-lucide="mail-check"></i> Wyślij ponownie mail potwierdzający';
     }
     if (googleButton) googleButton.disabled = busy;
+    if (forgotButton) forgotButton.disabled = busy;
+    if (backButton) backButton.disabled = busy;
     if (loginTab) loginTab.disabled = busy;
     if (registerTab) registerTab.disabled = busy;
     refreshIcons();
@@ -969,6 +1105,7 @@
     syncSession = null;
     currentProfileAssignment = null;
     remoteReady = false;
+    passwordRecoveryMode = false;
     setAuthMode('login');
     updateSyncUI();
     toast('Wylogowano. Dane lokalne nadal są na tym urządzeniu.');
