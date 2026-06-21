@@ -10,6 +10,7 @@
     <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
     <script defer src="config.js"></script>
     <script defer src="app.js"></script>
   </head>
@@ -703,10 +704,11 @@
               </button>
               <label class="ghost-button file-button">
                 <i data-lucide="scan-barcode"></i>
-                Zdjecie kodu
-                <input id="barcode-file" type="file" accept="image/png,image/jpeg,image/webp">
+                Zrób/wybierz zdjęcie
+                <input id="barcode-file" type="file" accept="image/*" capture="environment">
               </label>
             </div>
+            <p class="storage-note">Na telefonie przycisk może otworzyć aparat. Na komputerze możesz wybrać zdjęcie kodu z dysku.</p>
             <div id="barcode-result" class="barcode-result"></div>
           </section>
 

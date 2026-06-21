@@ -3019,27 +3019,139 @@
     const file = event.target.files && event.target.files[0];
     event.target.value = '';
     if (!file) return;
-    if (!('BarcodeDetector' in window)) {
-      toast('Ta przegladarka nie wspiera skanowania kodow ze zdjecia. Wpisz kod recznie.');
-      return;
-    }
 
+    renderBarcodeResult('scan-loading');
     try {
-      const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] });
-      const bitmap = await createImageBitmap(file);
-      const codes = await detector.detect(bitmap);
-      if (bitmap.close) bitmap.close();
-      const code = normalizeBarcode(codes && codes[0] && codes[0].rawValue);
+      const code = normalizeBarcode(await detectBarcodeFromImageFile(file));
       if (!code) {
-        toast('Nie udalo sie odczytac kodu z tego zdjecia.');
+        renderBarcodeResult('scan-empty');
+        toast('Nie udalo sie odczytac kodu z tego zdjecia. Sprobuj zrobic ostrzejsze zdjecie albo wpisz kod recznie.');
         return;
       }
       $('barcode-input').value = code;
       await lookupBarcode(code);
     } catch (error) {
       console.error(error);
+      renderBarcodeResult('scan-error', error.message);
       toast(`Skanowanie kodu nie powiodlo sie: ${error.message}`);
     }
+  }
+
+  async function detectBarcodeFromImageFile(file) {
+    const imageUrl = URL.createObjectURL(file);
+    try {
+      const image = await loadImageElement(imageUrl);
+      const candidates = await buildBarcodeImageCandidates(image);
+
+      for (const candidate of candidates) {
+        const code = await detectBarcodeNative(candidate).catch(() => '');
+        if (code) return code;
+      }
+
+      if (window.ZXing && window.ZXing.BrowserMultiFormatReader) {
+        for (const candidate of candidates) {
+          const code = await detectBarcodeWithZXing(candidate).catch(() => '');
+          if (code) return code;
+        }
+      }
+      return '';
+    } finally {
+      URL.revokeObjectURL(imageUrl);
+    }
+  }
+
+  async function detectBarcodeNative(source) {
+    if (!('BarcodeDetector' in window)) return '';
+    const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] });
+    const codes = await detector.detect(source);
+    return normalizeBarcode(codes && codes[0] && codes[0].rawValue);
+  }
+
+  async function detectBarcodeWithZXing(source) {
+    const reader = new window.ZXing.BrowserMultiFormatReader();
+    const image = source instanceof HTMLImageElement ? source : await imageFromCanvas(source);
+    const result = await reader.decodeFromImageElement(image);
+    if (reader.reset) reader.reset();
+    return normalizeBarcode(result && (typeof result.getText === 'function' ? result.getText() : result.text));
+  }
+
+  function loadImageElement(src) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('Nie udalo sie wczytac zdjecia.'));
+      image.src = src;
+    });
+  }
+
+  async function buildBarcodeImageCandidates(image) {
+    const candidates = [image];
+    const baseCanvas = drawImageToScanCanvas(image);
+    candidates.push(baseCanvas);
+    candidates.push(adjustBarcodeCanvas(baseCanvas, 'contrast'));
+    candidates.push(adjustBarcodeCanvas(baseCanvas, 'threshold'));
+
+    const band = cropMiddleBand(baseCanvas);
+    if (band) {
+      candidates.push(band);
+      candidates.push(adjustBarcodeCanvas(band, 'contrast'));
+      candidates.push(adjustBarcodeCanvas(band, 'threshold'));
+    }
+    return candidates;
+  }
+
+  function drawImageToScanCanvas(image) {
+    const maxSide = 1800;
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
+    const width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+    const height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(image, 0, 0, width, height);
+    return canvas;
+  }
+
+  function cropMiddleBand(canvas) {
+    if (!canvas || canvas.height < 220) return null;
+    const top = Math.round(canvas.height * 0.18);
+    const height = Math.max(120, Math.round(canvas.height * 0.64));
+    const crop = document.createElement('canvas');
+    crop.width = canvas.width;
+    crop.height = Math.min(height, canvas.height - top);
+    crop.getContext('2d', { willReadFrequently: true }).drawImage(canvas, 0, top, canvas.width, crop.height, 0, 0, crop.width, crop.height);
+    return crop;
+  }
+
+  function adjustBarcodeCanvas(source, mode) {
+    const canvas = document.createElement('canvas');
+    canvas.width = source.width;
+    canvas.height = source.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(source, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let index = 0; index < data.length; index += 4) {
+      const gray = (data[index] * 0.299) + (data[index + 1] * 0.587) + (data[index + 2] * 0.114);
+      const value = mode === 'threshold'
+        ? (gray > 138 ? 255 : 0)
+        : Math.max(0, Math.min(255, ((gray - 128) * 1.65) + 128));
+      data[index] = value;
+      data[index + 1] = value;
+      data[index + 2] = value;
+    }
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
+  }
+
+  function imageFromCanvas(canvas) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('Nie udalo sie przygotowac zdjecia do skanowania.'));
+      image.src = canvas.toDataURL('image/png');
+    });
   }
 
   async function lookupBarcode(code) {
@@ -3092,6 +3204,18 @@
     if (!target) return;
     if (status === 'loading') {
       target.innerHTML = '<div class="empty-state">Szukam produktu...</div>';
+      return;
+    }
+    if (status === 'scan-loading') {
+      target.innerHTML = '<div class="empty-state">Odczytuje kod ze zdjecia...</div>';
+      return;
+    }
+    if (status === 'scan-empty') {
+      target.innerHTML = '<div class="empty-state">Nie udalo sie odczytac kodu. Zrob ostre zdjecie calego kodu albo wpisz numer recznie.</div>';
+      return;
+    }
+    if (status === 'scan-error') {
+      target.innerHTML = `<div class="empty-state">Blad skanowania zdjecia: ${escapeHTML(message || 'sprobuj ponownie albo wpisz kod recznie')}</div>`;
       return;
     }
     if (status === 'empty') {
