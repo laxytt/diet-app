@@ -113,7 +113,8 @@
       heightCm: 0,
       age: 35,
       sex: 'female',
-      activityLevel: 'light'
+      activityLevel: 'light',
+      bodyGoal: ''
     },
     foods: seedFoods,
     recipes: seedRecipes,
@@ -166,7 +167,7 @@
   let remoteReady = false;
   let lastRemoteRevision = loadRemoteRevision(currentProfileId);
   let isAuthInitializing = true;
-  const signupModes = { gate: false };
+  let authMode = 'login';
   let sessionRefreshPromise = null;
   let reminderTimer = 0;
   let mobileAccordionPrepared = false;
@@ -178,6 +179,7 @@
   async function init() {
     bindEvents();
     initSupabaseClient();
+    setAuthMode('login');
     updateManualControls();
     setupMobileAccordions();
     $('selected-date').value = currentDate;
@@ -231,9 +233,11 @@
     $('entry-form').addEventListener('submit', addDiaryEntry);
     $('ai-analyze-button').addEventListener('click', analyzeMealFromText);
     $('ai-result').addEventListener('click', handleAIResultAction);
-    $('gate-auth-form').addEventListener('submit', loginUser);
-    $('gate-signup-button').addEventListener('click', signUpUser);
+    $('gate-auth-form').addEventListener('submit', submitAuthForm);
+    $('auth-login-tab').addEventListener('click', () => setAuthMode('login'));
+    $('auth-register-tab').addEventListener('click', () => setAuthMode('register'));
     $('gate-google-button').addEventListener('click', loginWithGoogle);
+    $('gate-resend-button').addEventListener('click', resendSignupEmail);
     $('quick-entry-form').addEventListener('submit', addQuickEntry);
     $('reset-entry-form').addEventListener('click', resetEntryFormWithUndo);
     $('undo-last-action').addEventListener('click', undoLastAction);
@@ -625,6 +629,11 @@
     syncStatus.classList.add('online');
   }
 
+  function submitAuthForm(event) {
+    if (authMode === 'register') return signUpUser(event);
+    return loginUser(event);
+  }
+
   async function loginUser(event) {
     event.preventDefault();
     if (!supabaseClient) {
@@ -648,6 +657,12 @@
       'Logowanie trwa za długo. Spróbuj ponownie.'
     ).catch((timeoutError) => ({ data: null, error: timeoutError }));
     if (error) {
+      if (isConfirmationError(error)) {
+        setAuthMode('register');
+        toast('Ten email nie jest jeszcze potwierdzony. Możesz wysłać mail potwierdzający ponownie.');
+        setAuthBusy(source, false);
+        return;
+      }
       toast(`Logowanie nieudane: ${error.message}`);
       setAuthBusy(source, false);
       return;
@@ -657,7 +672,7 @@
     await loadAssignedProfile();
     setAuthBusy(source, false);
     if (!currentProfileAssignment) return;
-    setSignupMode(source, false);
+    setAuthMode('login');
     toast('Zalogowano i włączono synchronizację.');
   }
 
@@ -691,12 +706,6 @@
     }
 
     const source = 'gate';
-    if (!signupModes[source]) {
-      setSignupMode(source, true);
-      toast('Uzupełnij nazwę użytkownika, email i hasło, żeby utworzyć konto.');
-      return;
-    }
-
     const credentials = readAuthCredentials(source);
     const email = credentials.email;
     const password = credentials.password;
@@ -705,14 +714,27 @@
       toast('Podaj email, hasło i nazwę użytkownika.');
       return;
     }
+    if (password.length < 6) {
+      toast('Hasło musi mieć co najmniej 6 znaków.');
+      return;
+    }
 
-    setAuthBusy(source, true, 'Tworzę...', 'signup');
+    const signupProfile = readSignupProfile();
+    const metadata = compactObject({
+      username,
+      age: signupProfile.age,
+      height_cm: signupProfile.heightCm,
+      weight_kg: signupProfile.weightKg,
+      body_goal: signupProfile.bodyGoal
+    });
+
+    setAuthBusy(source, true, 'Tworzę konto...', 'signup');
     const { data, error } = await withTimeout(
       supabaseClient.auth.signUp({
         email,
         password,
         options: {
-          data: { username },
+          data: metadata,
           emailRedirectTo: authRedirectUrl()
         }
       }),
@@ -720,6 +742,12 @@
       'Rejestracja trwa za długo. Spróbuj ponownie.'
     ).catch((timeoutError) => ({ data: null, error: timeoutError }));
     if (error) {
+      if (isAlreadyRegisteredError(error)) {
+        setAuthMode('register');
+        toast('To konto może już istnieć. Jeśli mail nie przyszedł, wyślij potwierdzenie ponownie.');
+        setAuthBusy(source, false);
+        return;
+      }
       toast(`Nie udało się utworzyć konta: ${error.message}`);
       setAuthBusy(source, false);
       return;
@@ -727,37 +755,105 @@
     syncSession = data.session;
     if (data.session) {
       await loadAssignedProfile();
+      applySignupProfileToState(signupProfile);
     }
     setAuthBusy(source, false);
     updateSyncUI();
-    setSignupMode(source, false);
     if (data.session && !currentProfileAssignment) {
       toast('Konto utworzone, ale ten email nie ma przypisanego profilu diety.');
       return;
     }
-    toast(data.session ? 'Konto utworzone i zalogowane.' : 'Konto utworzone. Sprawdź email, jeśli Supabase wymaga potwierdzenia.');
+    toast(data.session ? 'Konto utworzone i zalogowane.' : 'Konto utworzone. Sprawdź skrzynkę, spam i oferty. Możesz też wysłać potwierdzenie ponownie.');
   }
 
-  function setSignupMode(source, enabled) {
-    signupModes[source] = enabled;
+  async function resendSignupEmail(event) {
+    if (event) event.preventDefault();
+    if (!supabaseClient) {
+      toast('Najpierw skonfiguruj Supabase w config.js.');
+      return;
+    }
+
+    const source = 'gate';
+    const { email } = readAuthCredentials(source);
+    if (!email) {
+      toast('Wpisz email, na który wysłać potwierdzenie.');
+      return;
+    }
+
+    setAuthBusy(source, true, 'Wysyłam...', 'resend');
+    const { error } = await withTimeout(
+      supabaseClient.auth.resend({
+        type: 'signup',
+        email,
+        options: { emailRedirectTo: authRedirectUrl() }
+      }),
+      12000,
+      'Wysyłanie maila trwa za długo. Spróbuj ponownie.'
+    ).catch((timeoutError) => ({ error: timeoutError }));
+    setAuthBusy(source, false);
+
+    if (error) {
+      toast(`Nie udało się wysłać potwierdzenia: ${error.message}`);
+      return;
+    }
+    toast('Mail potwierdzający wysłany ponownie. Sprawdź też spam i oferty.');
+  }
+
+  function setAuthMode(mode) {
+    authMode = mode === 'register' ? 'register' : 'login';
+    const isRegister = authMode === 'register';
     const prefix = 'gate-';
     const usernameInput = $(`${prefix}auth-username`);
-    const usernameField = usernameInput ? usernameInput.closest('.signup-field') : null;
-    const signupButton = $('gate-signup-button');
     const passwordInput = $(`${prefix}auth-password`);
-    if (usernameField) usernameField.hidden = !enabled;
+    const loginTab = $('auth-login-tab');
+    const registerTab = $('auth-register-tab');
+    const title = $('auth-title');
+    const subtitle = $('auth-subtitle');
+    const note = $('gate-auth-note');
+    const primaryButton = $('gate-login-button');
+    const googleButton = $('gate-google-button');
+    const resendButton = $('gate-resend-button');
+    document.querySelectorAll('.signup-field').forEach((element) => {
+      element.hidden = !isRegister;
+    });
     if (usernameInput) {
-      usernameInput.required = enabled;
-      if (enabled) usernameInput.setAttribute('autocomplete', 'name');
+      usernameInput.required = isRegister;
+      usernameInput.setAttribute('autocomplete', 'name');
     }
-    if (passwordInput) passwordInput.setAttribute('autocomplete', enabled ? 'new-password' : 'current-password');
-    if (signupButton) {
-      signupButton.innerHTML = enabled
+    if (passwordInput) passwordInput.setAttribute('autocomplete', isRegister ? 'new-password' : 'current-password');
+    if (loginTab) {
+      loginTab.classList.toggle('is-active', !isRegister);
+      loginTab.setAttribute('aria-selected', String(!isRegister));
+    }
+    if (registerTab) {
+      registerTab.classList.toggle('is-active', isRegister);
+      registerTab.setAttribute('aria-selected', String(isRegister));
+    }
+    if (title) title.textContent = isRegister ? 'Utwórz konto' : 'Zaloguj się';
+    if (subtitle) {
+      subtitle.textContent = isRegister
+        ? 'Załóż konto i uzupełnij opcjonalnie podstawowe dane.'
+        : 'Wróć do swojego profilu i synchronizacji.';
+    }
+    if (note) {
+      note.textContent = isRegister
+        ? 'Po rejestracji wyślemy mail potwierdzający. Sprawdź też spam i oferty.'
+        : 'Nie masz konta? Przełącz na rejestrację powyżej.';
+    }
+    if (primaryButton) {
+      primaryButton.innerHTML = isRegister
         ? '<i data-lucide="user-plus"></i> Zarejestruj'
-        : '<i data-lucide="user-plus"></i> Utwórz konto';
+        : '<i data-lucide="log-in"></i> Zaloguj';
+    }
+    if (googleButton) {
+      googleButton.innerHTML = isRegister
+        ? '<span class="google-mark" aria-hidden="true">G</span> Zarejestruj przez Google'
+        : '<span class="google-mark" aria-hidden="true">G</span> Zaloguj przez Google';
+    }
+    if (resendButton) {
+      resendButton.hidden = !isRegister;
     }
     refreshIcons();
-    if (enabled && usernameInput) usernameInput.focus();
   }
 
   function readAuthCredentials(source) {
@@ -770,21 +866,76 @@
     };
   }
 
+  function readSignupProfile() {
+    return {
+      age: numberValue($('gate-auth-age').value, 0) || null,
+      heightCm: numberValue($('gate-auth-height').value, 0) || null,
+      weightKg: numberValue($('gate-auth-weight').value, 0) || null,
+      bodyGoal: $('gate-auth-goal').value || ''
+    };
+  }
+
+  function compactObject(object) {
+    return Object.entries(object).reduce((result, [key, value]) => {
+      if (value !== null && value !== undefined && value !== '') result[key] = value;
+      return result;
+    }, {});
+  }
+
+  function isConfirmationError(error) {
+    return /not confirmed|confirm|potwierdz/i.test(String(error && error.message ? error.message : ''));
+  }
+
+  function isAlreadyRegisteredError(error) {
+    return /already|registered|exists|istnieje/i.test(String(error && error.message ? error.message : ''));
+  }
+
+  function applySignupProfileToState(profile) {
+    if (!profile || !currentProfileAssignment) return;
+    let changed = false;
+    if (profile.heightCm) {
+      state.settings.heightCm = profile.heightCm;
+      changed = true;
+    }
+    if (profile.age) {
+      state.settings.age = profile.age;
+      changed = true;
+    }
+    if (profile.bodyGoal) {
+      state.settings.bodyGoal = profile.bodyGoal;
+      changed = true;
+    }
+    if (profile.weightKg) {
+      upsertByDate(state.weights, todayISO(), { id: uid(), date: todayISO(), weight: profile.weightKg });
+      changed = true;
+    }
+    if (changed) saveState();
+  }
+
   function setAuthBusy(source, busy, label = 'Loguję...', action = 'login') {
     const loginButton = $('gate-login-button');
-    const signupButton = $('gate-signup-button');
+    const googleButton = $('gate-google-button');
+    const resendButton = $('gate-resend-button');
+    const loginTab = $('auth-login-tab');
+    const registerTab = $('auth-register-tab');
+    const defaultPrimary = authMode === 'register'
+      ? '<i data-lucide="user-plus"></i> Zarejestruj'
+      : '<i data-lucide="log-in"></i> Zaloguj';
     if (loginButton) {
       loginButton.disabled = busy;
-      loginButton.innerHTML = busy && action === 'login'
+      loginButton.innerHTML = busy && action !== 'resend'
         ? `<i data-lucide="loader-circle"></i> ${label}`
-        : '<i data-lucide="log-in"></i> Zaloguj';
+        : defaultPrimary;
     }
-    if (signupButton) {
-      signupButton.disabled = busy;
-      signupButton.innerHTML = busy && action === 'signup'
+    if (resendButton) {
+      resendButton.disabled = busy;
+      resendButton.innerHTML = busy && action === 'resend'
         ? `<i data-lucide="loader-circle"></i> ${label}`
-        : `<i data-lucide="user-plus"></i> ${signupModes[source] ? 'Zarejestruj' : 'Utwórz konto'}`;
+        : '<i data-lucide="mail-check"></i> Wyślij ponownie mail potwierdzający';
     }
+    if (googleButton) googleButton.disabled = busy;
+    if (loginTab) loginTab.disabled = busy;
+    if (registerTab) registerTab.disabled = busy;
     refreshIcons();
   }
 
@@ -818,7 +969,7 @@
     syncSession = null;
     currentProfileAssignment = null;
     remoteReady = false;
-    setSignupMode('gate', false);
+    setAuthMode('login');
     updateSyncUI();
     toast('Wylogowano. Dane lokalne nadal są na tym urządzeniu.');
   }
@@ -3545,6 +3696,7 @@
       age: numberValue($('profile-age').value, 35),
       sex: $('profile-sex').value === 'male' ? 'male' : 'female',
       activityLevel: $('profile-activity-level').value || 'light',
+      bodyGoal: $('profile-goal').value || '',
       calories: numberValue($('target-calories').value, 2200),
       protein: numberValue($('target-protein').value, 160),
       carbs: numberValue($('target-carbs').value, 230),
@@ -3561,6 +3713,7 @@
     $('profile-age').value = state.settings.age || '';
     $('profile-sex').value = state.settings.sex === 'male' ? 'male' : 'female';
     $('profile-activity-level').value = state.settings.activityLevel || 'light';
+    $('profile-goal').value = state.settings.bodyGoal || '';
     $('target-calories').value = state.settings.calories;
     $('target-protein').value = state.settings.protein;
     $('target-carbs').value = state.settings.carbs;

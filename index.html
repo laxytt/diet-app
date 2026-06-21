@@ -71,10 +71,18 @@
               <i data-lucide="leaf"></i>
             </div>
             <div>
-              <h2>Zaloguj się</h2>
-              <p>Synchronizuj profil Agnieszki na każdym urządzeniu.</p>
+              <h2 id="auth-title">Zaloguj się</h2>
+              <p id="auth-subtitle">Synchronizuj profil Agnieszki na każdym urządzeniu.</p>
             </div>
             <span class="stat-chip">Sync</span>
+          </div>
+          <div class="auth-mode-switch" role="tablist" aria-label="Tryb konta">
+            <button class="is-active" id="auth-login-tab" type="button" role="tab" aria-selected="true">
+              Logowanie
+            </button>
+            <button id="auth-register-tab" type="button" role="tab" aria-selected="false">
+              Rejestracja
+            </button>
           </div>
           <p class="auth-hint">Dane profilu są prywatne i pojawią się dopiero po zalogowaniu.</p>
           <form id="gate-auth-form" class="auth-form">
@@ -90,22 +98,46 @@
               <span>Hasło</span>
               <input id="gate-auth-password" type="password" autocomplete="current-password" placeholder="Hasło">
             </label>
+            <div class="signup-field signup-profile-grid wide" hidden>
+              <label>
+                <span>Wiek (opcjonalnie)</span>
+                <input id="gate-auth-age" type="number" min="10" max="100" step="1" placeholder="np. 45">
+              </label>
+              <label>
+                <span>Wzrost (opcjonalnie)</span>
+                <input id="gate-auth-height" type="number" min="100" max="230" step="1" placeholder="cm">
+              </label>
+              <label>
+                <span>Waga (opcjonalnie)</span>
+                <input id="gate-auth-weight" type="number" min="20" max="300" step="0.1" placeholder="kg">
+              </label>
+              <label>
+                <span>Cel</span>
+                <select id="gate-auth-goal">
+                  <option value="">Wybierz później</option>
+                  <option value="lose_weight">Zmniejszenie wagi</option>
+                  <option value="maintain">Utrzymanie wagi</option>
+                  <option value="muscle_gain">Budowanie masy mięśniowej</option>
+                  <option value="health">Zdrowsze nawyki</option>
+                </select>
+              </label>
+            </div>
             <div class="button-row">
               <button class="primary-button" id="gate-login-button" type="submit">
                 <i data-lucide="log-in"></i>
                 Zaloguj
               </button>
-              <button class="secondary-button" id="gate-signup-button" type="button">
-                <i data-lucide="user-plus"></i>
-                Utwórz konto
-              </button>
               <button class="secondary-button google-button" id="gate-google-button" type="button">
                 <span class="google-mark" aria-hidden="true">G</span>
                 Zaloguj przez Google
               </button>
+              <button class="ghost-button auth-resend-button" id="gate-resend-button" type="button" hidden>
+                <i data-lucide="mail-check"></i>
+                Wyślij ponownie mail potwierdzający
+              </button>
             </div>
           </form>
-          <p class="storage-note" id="gate-auth-note">Po potwierdzeniu maila wrócisz na tę stronę.</p>
+          <p class="storage-note" id="gate-auth-note">Nie masz konta? Przełącz na rejestrację powyżej.</p>
         </div>
       </section>
 
@@ -1115,6 +1147,16 @@
                     <option value="moderate">Srednia</option>
                     <option value="active">Wysoka</option>
                     <option value="very_active">Bardzo wysoka</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Cel</span>
+                  <select id="profile-goal">
+                    <option value="">Nie wybrano</option>
+                    <option value="lose_weight">Zmniejszenie wagi</option>
+                    <option value="maintain">Utrzymanie wagi</option>
+                    <option value="muscle_gain">Budowanie masy mięśniowej</option>
+                    <option value="health">Zdrowsze nawyki</option>
                   </select>
                 </label>
                 <label>
