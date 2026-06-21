@@ -23,6 +23,30 @@
   --radius: 8px;
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1712;
+  --surface: #172019;
+  --surface-strong: #223126;
+  --surface-soft: #121a15;
+  --ink: #edf5eb;
+  --muted: #a8b6aa;
+  --line: #2f4034;
+  --green: #6fc17e;
+  --green-dark: #93dda0;
+  --green-soft: #1f3526;
+  --coral: #f08a68;
+  --coral-soft: #41261f;
+  --amber: #efb45a;
+  --amber-soft: #3c311b;
+  --teal: #8fb7ff;
+  --teal-soft: #1d2b43;
+  --danger: #ff8f8f;
+  --focus: rgba(111, 193, 126, 0.24);
+  --shadow: 0 16px 42px rgba(0, 0, 0, 0.32);
+  --shadow-strong: 0 28px 80px rgba(0, 0, 0, 0.46);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -43,6 +67,13 @@ body {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 15px;
   line-height: 1.45;
+}
+
+:root[data-theme="dark"] body {
+  background:
+    radial-gradient(circle at 8% 0, rgba(111, 193, 126, 0.12), transparent 32%),
+    radial-gradient(circle at 96% 10%, rgba(143, 183, 255, 0.12), transparent 36%),
+    linear-gradient(180deg, #101711 0, var(--bg) 54%, #0b110d 100%);
 }
 
 button,
@@ -318,10 +349,23 @@ select:focus {
   color: var(--muted);
 }
 
+.topbar-theme {
+  min-height: 42px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  font-weight: 850;
+}
+
 .topbar-logout:hover {
   color: var(--danger);
   border-color: rgba(185, 71, 63, 0.22);
   background: #fff7f7;
+}
+
+.topbar-theme:hover {
+  border-color: var(--green);
+  color: var(--green-dark);
 }
 
 .icon-button:hover,
@@ -2337,21 +2381,17 @@ th {
 
   .app-shell:not(.auth-mode) {
     max-width: 1580px;
-    display: grid;
-    grid-template-columns: 238px minmax(0, 1fr);
-    grid-template-areas:
-      "side top"
-      "side main";
-    column-gap: 24px;
-    align-items: start;
+    display: block;
+    position: relative;
+    padding-left: 290px;
   }
 
   .app-shell:not(.auth-mode) .topbar {
-    grid-area: top;
     grid-template-columns: 1fr;
     justify-items: end;
     background: rgba(255, 253, 248, 0.72);
     border-bottom: 0;
+    margin-bottom: 14px;
   }
 
   .app-shell:not(.auth-mode) .topbar .brand-lockup {
@@ -2359,7 +2399,6 @@ th {
   }
 
   .app-shell:not(.auth-mode) #main-content {
-    grid-area: main;
     min-width: 0;
   }
 
@@ -2414,17 +2453,18 @@ th {
   }
 
   .tabbar {
-    grid-area: side;
-    position: sticky;
+    position: fixed;
     top: 22px;
-    align-self: start;
+    bottom: 28px;
+    left: max(28px, calc((100vw - 1580px) / 2 + 28px));
+    width: 238px;
     display: flex;
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
     gap: 8px;
     overflow: visible;
-    min-height: calc(100vh - 44px);
+    min-height: 0;
     margin-bottom: 0;
     padding: 90px 12px 18px;
     background: rgba(255, 255, 255, 0.7);
@@ -3373,7 +3413,7 @@ th {
 }
 @media (max-width: 699px) {
   .date-switcher {
-    grid-template-columns: minmax(0, 1fr) minmax(118px, 136px);
+    grid-template-columns: minmax(0, 1fr) 40px minmax(118px, 136px);
     align-items: center;
   }
 
@@ -3399,4 +3439,167 @@ th {
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+  .topbar-theme {
+    width: 40px;
+    min-height: 38px;
+    padding: 0;
+  }
+
+  .topbar-theme span {
+    display: none;
+  }
+}
+
+:root[data-theme="dark"] .topbar,
+:root[data-theme="dark"] .app-shell:not(.auth-mode) .topbar {
+  background: rgba(15, 23, 18, 0.82);
+  border-color: rgba(67, 86, 70, 0.72);
+}
+
+:root[data-theme="dark"] .date-switcher,
+:root[data-theme="dark"] .profile-badge,
+:root[data-theme="dark"] .sync-status,
+:root[data-theme="dark"] .topbar-theme,
+:root[data-theme="dark"] .topbar-logout,
+:root[data-theme="dark"] .tabbar,
+:root[data-theme="dark"] .mobile-more-menu,
+:root[data-theme="dark"] .mobile-action-menu-items {
+  background: rgba(23, 32, 25, 0.88);
+  border-color: var(--line);
+  box-shadow: var(--shadow);
+}
+
+:root[data-theme="dark"] .profile-badge {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea,
+:root[data-theme="dark"] .inline-input {
+  background: #101711;
+  border-color: var(--line);
+  color: var(--ink);
+  color-scheme: dark;
+}
+
+:root[data-theme="dark"] input::placeholder,
+:root[data-theme="dark"] textarea::placeholder {
+  color: #7f8d81;
+}
+
+:root[data-theme="dark"] .inline-input select,
+:root[data-theme="dark"] .manual-grid,
+:root[data-theme="dark"] .stat-chip,
+:root[data-theme="dark"] .forecast-note {
+  background: var(--surface-soft);
+}
+
+:root[data-theme="dark"] .icon-button:hover,
+:root[data-theme="dark"] .ghost-button:hover,
+:root[data-theme="dark"] .secondary-button:hover {
+  border-color: #4a604f;
+  background: #202b23;
+}
+
+:root[data-theme="dark"] .danger-button,
+:root[data-theme="dark"] .danger-button:hover {
+  background: #2a1918;
+  border-color: #69423e;
+}
+
+:root[data-theme="dark"] .sync-status.error {
+  background: #351f1d;
+  border-color: #70413d;
+}
+
+:root[data-theme="dark"] .auth-panel-header {
+  background:
+    radial-gradient(circle at 18% 4%, rgba(111, 193, 126, 0.2), transparent 34%),
+    linear-gradient(135deg, rgba(31, 53, 38, 0.96), rgba(38, 31, 22, 0.9));
+}
+
+:root[data-theme="dark"] .auth-mode-switch button.is-active,
+:root[data-theme="dark"] .auth-brand-chip,
+:root[data-theme="dark"] .google-button,
+:root[data-theme="dark"] .auth-mini-card,
+:root[data-theme="dark"] .dashboard-profile-card,
+:root[data-theme="dark"] .dashboard-meal-card,
+:root[data-theme="dark"] .insight-card,
+:root[data-theme="dark"] .recommendation-card,
+:root[data-theme="dark"] .recipe-card,
+:root[data-theme="dark"] .paid-recipes-intro,
+:root[data-theme="dark"] .paid-recipe-card,
+:root[data-theme="dark"] .ai-summary,
+:root[data-theme="dark"] .ai-item,
+:root[data-theme="dark"] .meal-section,
+:root[data-theme="dark"] .food-row,
+:root[data-theme="dark"] .empty-state,
+:root[data-theme="dark"] .quick-list-item,
+:root[data-theme="dark"] .planned-meal-card,
+:root[data-theme="dark"] .shopping-item,
+:root[data-theme="dark"] .weekly-review-card,
+:root[data-theme="dark"] .sync-meta div,
+:root[data-theme="dark"] .activity-item,
+:root[data-theme="dark"] .barcode-card,
+:root[data-theme="dark"] .chart-tooltip {
+  background: rgba(23, 32, 25, 0.9);
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .dashboard-hero,
+:root[data-theme="dark"] .logging-hero,
+:root[data-theme="dark"] .trend-hero,
+:root[data-theme="dark"] .coach-panel,
+:root[data-theme="dark"] .recipes-hero,
+:root[data-theme="dark"] .quick-entry-form {
+  background:
+    linear-gradient(135deg, rgba(23, 32, 25, 0.96), rgba(18, 26, 21, 0.94)),
+    radial-gradient(circle at 94% 8%, rgba(111, 193, 126, 0.15), transparent 34%);
+}
+
+:root[data-theme="dark"] .meal-title,
+:root[data-theme="dark"] .entry-row:hover,
+:root[data-theme="dark"] .food-row:hover {
+  background: #1b261e;
+}
+
+:root[data-theme="dark"] .meal-title-main > svg,
+:root[data-theme="dark"] .icon-button.subtle {
+  background: var(--surface);
+}
+
+:root[data-theme="dark"] .meter,
+:root[data-theme="dark"] .mini-meter {
+  background: #2b392f;
+}
+
+:root[data-theme="dark"] .calorie-ring {
+  background:
+    radial-gradient(circle at center, var(--surface) 0 55%, transparent 56%),
+    conic-gradient(var(--green) var(--progress), #2f4034 0);
+}
+
+:root[data-theme="dark"] .accent-blue .metric-icon {
+  background: #1d2b43;
+  color: #8fb7ff;
+}
+
+:root[data-theme="dark"] .water-drops {
+  background: linear-gradient(180deg, #15241f, #101b19);
+}
+
+:root[data-theme="dark"] .water-drops span {
+  background: #15263a;
+  color: #537aa5;
+}
+
+:root[data-theme="dark"] .water-drops span.is-filled {
+  background: #1e4d75;
+  color: #9fd1ff;
+}
+
+:root[data-theme="dark"] .macro-warning {
+  color: #ffd899;
 }

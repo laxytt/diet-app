@@ -37,6 +37,10 @@
             <strong id="profile-name">-</strong>
           </div>
           <span id="sync-status" class="sync-status">Lokalnie</span>
+          <button class="ghost-button topbar-theme" id="theme-toggle" type="button" aria-label="Przełącz tryb ciemny" title="Przełącz tryb ciemny">
+            <i data-lucide="moon"></i>
+            <span>Ciemny</span>
+          </button>
           <button class="icon-button" id="prev-day" type="button" aria-label="Poprzedni dzień" title="Poprzedni dzień">
             <i data-lucide="chevron-left"></i>
           </button>
@@ -1177,6 +1181,13 @@
                     <option value="maintain">Utrzymanie wagi</option>
                     <option value="muscle_gain">Budowanie masy mięśniowej</option>
                     <option value="health">Zdrowsze nawyki</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Wygląd</span>
+                  <select id="profile-theme">
+                    <option value="light">Jasny</option>
+                    <option value="dark">Ciemny</option>
                   </select>
                 </label>
                 <label>

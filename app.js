@@ -114,7 +114,8 @@
       age: 35,
       sex: 'female',
       activityLevel: 'light',
-      bodyGoal: ''
+      bodyGoal: '',
+      theme: 'light'
     },
     foods: seedFoods,
     recipes: seedRecipes,
@@ -175,6 +176,7 @@
 
   const $ = (id) => document.getElementById(id);
 
+  applyTheme();
   init();
 
   async function init() {
@@ -244,6 +246,7 @@
       setAuthMode('login');
       updateSyncUI();
     });
+    $('theme-toggle').addEventListener('click', toggleTheme);
     $('gate-resend-button').addEventListener('click', resendSignupEmail);
     $('quick-entry-form').addEventListener('submit', addQuickEntry);
     $('reset-entry-form').addEventListener('click', resetEntryFormWithUndo);
@@ -368,6 +371,7 @@
   }
 
   function render() {
+    applyTheme();
     $('selected-date').value = currentDate;
     renderProfileBadge();
     renderSummary();
@@ -453,6 +457,39 @@
     mobileAccordionPrepared = compact;
   }
 
+  function currentTheme() {
+    return state && state.settings && state.settings.theme === 'dark' ? 'dark' : 'light';
+  }
+
+  function applyTheme() {
+    const theme = currentTheme();
+    document.documentElement.dataset.theme = theme;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#0f1712' : '#2f7d59');
+    updateThemeToggle();
+  }
+
+  function updateThemeToggle() {
+    const button = $('theme-toggle');
+    if (!button) return;
+    const dark = currentTheme() === 'dark';
+    button.innerHTML = dark
+      ? '<i data-lucide="sun"></i><span>Jasny</span>'
+      : '<i data-lucide="moon"></i><span>Ciemny</span>';
+    button.setAttribute('aria-label', dark ? 'Przełącz tryb jasny' : 'Przełącz tryb ciemny');
+    button.setAttribute('title', dark ? 'Przełącz tryb jasny' : 'Przełącz tryb ciemny');
+    refreshIcons();
+  }
+
+  function toggleTheme() {
+    state.settings.theme = currentTheme() === 'dark' ? 'light' : 'dark';
+    saveState();
+    applyTheme();
+    renderSettings();
+    renderCharts();
+    toast(state.settings.theme === 'dark' ? 'Tryb ciemny włączony.' : 'Tryb jasny włączony.');
+  }
+
   async function switchProfile(profileId) {
     const profile = profileById(profileId);
     if (!profile || profile.id === currentProfileId) return;
@@ -461,6 +498,7 @@
     currentProfileId = profile.id;
     localStorage.setItem(CURRENT_PROFILE_KEY, currentProfileId);
     state = loadState(currentProfileId);
+    applyTheme();
     aiDraft = null;
     clearImport();
     render();
@@ -1147,6 +1185,7 @@
       localStorage.setItem(CURRENT_PROFILE_KEY, currentProfileId);
       lastRemoteRevision = loadRemoteRevision(currentProfileId);
       state = loadState(currentProfileId);
+      applyTheme();
       aiDraft = null;
       clearImport();
       updateSyncUI();
@@ -3958,6 +3997,7 @@
       sex: $('profile-sex').value === 'male' ? 'male' : 'female',
       activityLevel: $('profile-activity-level').value || 'light',
       bodyGoal: $('profile-goal').value || '',
+      theme: $('profile-theme').value === 'dark' ? 'dark' : 'light',
       calories: numberValue($('target-calories').value, 2200),
       protein: numberValue($('target-protein').value, 160),
       carbs: numberValue($('target-carbs').value, 230),
@@ -3965,6 +4005,7 @@
       water: numberValue($('target-water').value, 2500)
     };
     saveState();
+    applyTheme();
     render();
     toast('Cele zapisane.');
   }
@@ -3975,6 +4016,7 @@
     $('profile-sex').value = state.settings.sex === 'male' ? 'male' : 'female';
     $('profile-activity-level').value = state.settings.activityLevel || 'light';
     $('profile-goal').value = state.settings.bodyGoal || '';
+    $('profile-theme').value = currentTheme();
     $('target-calories').value = state.settings.calories;
     $('target-protein').value = state.settings.protein;
     $('target-carbs').value = state.settings.carbs;
@@ -4664,7 +4706,7 @@
       });
 
       if (points.length <= 14 || index % Math.ceil(points.length / 8) === 0) {
-        ctx.fillStyle = '#65706d';
+        ctx.fillStyle = chartColor('muted');
         ctx.font = '11px system-ui';
         ctx.textAlign = 'center';
         ctx.fillText(point.label, x + barW / 2, height - 12);
@@ -4755,7 +4797,7 @@
     ctx.stroke();
 
     coordinates.forEach((point, index) => {
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = chartColor('surface');
       ctx.strokeStyle = options.color || '#2f7d59';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
@@ -4773,7 +4815,7 @@
       });
 
       if (points.length <= 14 || index % Math.ceil(points.length / 8) === 0) {
-        ctx.fillStyle = '#65706d';
+        ctx.fillStyle = chartColor('muted');
         ctx.font = '11px system-ui';
         ctx.textAlign = 'center';
         ctx.fillText(point.label, point.x, height - 12);
@@ -4829,7 +4871,7 @@
     points.forEach((point, index) => {
       const x = xFor(index);
       const y = yFor(point.value);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = chartColor('surface');
       ctx.strokeStyle = options.color || '#1f7a8c';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -4847,7 +4889,7 @@
       });
 
       if (points.length <= 14 || index % Math.ceil(points.length / 8) === 0) {
-        ctx.fillStyle = '#65706d';
+        ctx.fillStyle = chartColor('muted');
         ctx.font = '11px system-ui';
         ctx.textAlign = 'center';
         ctx.fillText(point.label, x, height - 12);
@@ -4895,11 +4937,11 @@
       angle += slice;
     });
 
-    ctx.fillStyle = '#202625';
+    ctx.fillStyle = chartColor('ink');
     ctx.font = '700 22px system-ui';
     ctx.textAlign = 'center';
     ctx.fillText(`${Math.round(total)}`, centerX, centerY - 2);
-    ctx.fillStyle = '#65706d';
+    ctx.fillStyle = chartColor('muted');
     ctx.font = '12px system-ui';
     ctx.fillText('kcal z makro', centerX, centerY + 17);
 
@@ -4910,7 +4952,7 @@
       ctx.fillStyle = segment.color;
       roundRect(ctx, legendX, y - 10, 12, 12, 3);
       ctx.fill();
-      ctx.fillStyle = '#202625';
+      ctx.fillStyle = chartColor('ink');
       ctx.font = '13px system-ui';
       ctx.textAlign = 'left';
       const percent = Math.round((segment.value / total) * 100);
@@ -4928,7 +4970,7 @@
     ctx.textAlign = 'right';
     [...visibleItems].reverse().forEach((item) => {
       const labelWidth = ctx.measureText(item.label).width;
-      ctx.fillStyle = '#202625';
+      ctx.fillStyle = chartColor('ink');
       ctx.fillText(item.label, x, y);
       const swatchX = x - labelWidth - 18;
       ctx.strokeStyle = item.color;
@@ -5038,16 +5080,27 @@
     return ctx;
   }
 
+  function chartColor(name) {
+    const dark = currentTheme() === 'dark';
+    const colors = {
+      surface: dark ? '#172019' : '#ffffff',
+      grid: dark ? '#2f4034' : '#e6ece3',
+      muted: dark ? '#a8b6aa' : '#65706d',
+      ink: dark ? '#edf5eb' : '#202625'
+    };
+    return colors[name] || colors.ink;
+  }
+
   function clearChart(ctx, width, height) {
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = chartColor('surface');
     ctx.fillRect(0, 0, width, height);
   }
 
   function drawGrid(ctx, pad, chartW, chartH, maxValue, minValue = 0) {
-    ctx.strokeStyle = '#e6ece3';
+    ctx.strokeStyle = chartColor('grid');
     ctx.lineWidth = 1;
-    ctx.fillStyle = '#65706d';
+    ctx.fillStyle = chartColor('muted');
     ctx.font = '11px system-ui';
     ctx.textAlign = 'right';
 
@@ -5063,7 +5116,7 @@
   }
 
   function drawEmptyLabel(ctx, width, height, text) {
-    ctx.fillStyle = '#65706d';
+    ctx.fillStyle = chartColor('muted');
     ctx.font = '700 14px system-ui';
     ctx.textAlign = 'center';
     ctx.fillText(text, width / 2, height / 2);
