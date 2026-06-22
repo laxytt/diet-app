@@ -115,6 +115,7 @@
       sex: 'female',
       activityLevel: 'light',
       bodyGoal: '',
+      autoTargets: true,
       theme: 'light'
     },
     foods: seedFoods,
@@ -140,6 +141,20 @@
       proteinDays: 5,
       reminderMorning: false,
       reminderEvening: false
+    },
+    preferences: {
+      dietStyle: 'balanced',
+      likedFoods: '',
+      dislikedFoods: '',
+      excludedIngredients: '',
+      favoriteDishes: '',
+      recipeNotes: ''
+    },
+    favoriteRecipeIds: [],
+    aiRecipeSuggestions: {
+      generatedAt: '',
+      summary: '',
+      items: []
     },
     undoStack: [],
     backupMeta: null
@@ -343,6 +358,8 @@
     $('recipe-form').addEventListener('submit', saveRecipe);
     $('reset-recipe-form').addEventListener('click', resetRecipeForm);
     $('recipe-list').addEventListener('click', handleRecipeAction);
+    $('generate-ai-recipes').addEventListener('click', generatePersonalRecipes);
+    $('ai-recipes-list').addEventListener('click', handleAIRecipeAction);
     $('recipe-premium-options').addEventListener('click', handlePaidRecipeAction);
     $('shopping-list-items').addEventListener('click', handleShoppingListAction);
     ['recipe-search', 'recipe-type-filter', 'recipe-max-calories', 'recipe-min-protein', 'recipe-max-time'].forEach((id) => {
@@ -357,6 +374,8 @@
       renderTrendSummary();
     });
     $('settings-form').addEventListener('submit', saveSettings);
+    $('preferences-form').addEventListener('submit', savePreferences);
+    $('apply-smart-targets').addEventListener('click', applySmartTargetsFromSettings);
     $('habit-goals-form').addEventListener('submit', saveHabitGoals);
     $('logout-button').addEventListener('click', logoutUser);
     $('admin-refresh').addEventListener('click', loadAdminDashboard);
@@ -403,6 +422,7 @@
     renderFoods();
     renderBarcodeResult();
     renderRecipes();
+    renderAIRecipes();
     renderShoppingList();
     renderSettings();
     renderStorageNote();
@@ -1340,6 +1360,11 @@
       upsertByDate(state.weights, todayISO(), { id: uid(), date: todayISO(), weight: profile.weightKg });
       changed = true;
     }
+    if (changed) {
+      state.settings.autoTargets = true;
+      const smart = calculateSmartTargets(state.settings);
+      if (smart) Object.assign(state.settings, smart.targets);
+    }
     if (changed) saveState();
   }
 
@@ -1714,6 +1739,11 @@
       habitGoals: options.preferSettings === 'base'
         ? { ...defaultState.habitGoals, ...base.habitGoals }
         : { ...defaultState.habitGoals, ...incoming.habitGoals },
+      preferences: options.preferSettings === 'base'
+        ? { ...defaultState.preferences, ...base.preferences }
+        : { ...defaultState.preferences, ...incoming.preferences },
+      favoriteRecipeIds: uniqueStrings([...(base.favoriteRecipeIds || []), ...(incoming.favoriteRecipeIds || [])]),
+      aiRecipeSuggestions: mergeAISuggestions(base.aiRecipeSuggestions, incoming.aiRecipeSuggestions),
       undoStack: trimUndoStack([...(base.undoStack || []), ...(incoming.undoStack || [])]),
       backupMeta: latestByCreatedAt(base.backupMeta, incoming.backupMeta)
     });
@@ -1768,6 +1798,14 @@
     const baseTime = Date.parse(baseItem.createdAt || '') || 0;
     const incomingTime = Date.parse(incomingItem.createdAt || '') || 0;
     return incomingTime >= baseTime ? incomingItem : baseItem;
+  }
+
+  function mergeAISuggestions(baseSuggestions, incomingSuggestions) {
+    const base = normalizeAISuggestions(baseSuggestions);
+    const incoming = normalizeAISuggestions(incomingSuggestions);
+    const baseTime = Date.parse(base.generatedAt || '') || 0;
+    const incomingTime = Date.parse(incoming.generatedAt || '') || 0;
+    return incomingTime >= baseTime ? incoming : base;
   }
 
   function mergeProfile(baseProfile = {}, incomingProfile = {}) {
@@ -3716,7 +3754,7 @@
   }
 
   function renderRecipes() {
-    const recipes = (Array.isArray(state.recipes) ? state.recipes : []).filter(recipeMatchesFilters);
+    const recipes = personalizeRecipeOrder((Array.isArray(state.recipes) ? state.recipes : []).filter(recipeMatchesFilters));
     $('recipe-list').innerHTML = recipes.length
       ? recipes.map(renderRecipeCard).join('')
       : '<div class="empty-state">Nie znaleziono przepisow dla tych filtrow.</div>';
@@ -3725,12 +3763,19 @@
 
   function renderRecipeCard(recipe) {
     const ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients.slice(0, 4) : [];
+    const personal = recipePersonalization(recipe);
+    const favorite = isFavoriteRecipe(recipe.id);
+    const tags = personal.reasons.slice(0, 3).map((reason) => `<span>${escapeHTML(reason)}</span>`).join('');
     return `
-      <article class="recipe-card">
+      <article class="recipe-card ${favorite ? 'is-favorite' : ''}">
         <div class="recipe-icon"><i data-lucide="${recipeIcon(recipe)}"></i></div>
         <div class="recipe-content">
-          <h3>${escapeHTML(recipe.name)}</h3>
+          <div class="recipe-title-row">
+            <h3>${escapeHTML(recipe.name)}</h3>
+            <span class="recipe-fit-score">${Math.max(0, Math.round(personal.score))}%</span>
+          </div>
           <p>${escapeHTML(recipe.description || ingredients.join(', ') || 'Wlasny przepis zapisany w profilu.')}</p>
+          ${tags ? `<div class="recipe-personal-tags">${tags}</div>` : ''}
           <div class="recipe-meta">
             <span>${Math.round(numberValue(recipe.calories, 0))} kcal</span>
             <span>${round1(recipe.protein)} g bialka</span>
@@ -3745,6 +3790,9 @@
             </button>
             <button class="icon-button" type="button" data-recipe-shopping="${recipe.id}" aria-label="Dodaj skladniki ${escapeHTML(recipe.name)} do listy zakupow" title="Dodaj do listy zakupow">
               <i data-lucide="shopping-basket"></i>
+            </button>
+            <button class="icon-button ${favorite ? 'is-active' : ''}" type="button" data-recipe-favorite="${recipe.id}" aria-label="Ulubiony przepis ${escapeHTML(recipe.name)}" title="Ulubiony">
+              <i data-lucide="star"></i>
             </button>
             <button class="icon-button" type="button" data-recipe-edit="${recipe.id}" aria-label="Edytuj ${escapeHTML(recipe.name)}" title="Edytuj">
               <i data-lucide="pencil"></i>
@@ -3771,8 +3819,10 @@
       recipe.description,
       ...(Array.isArray(recipe.ingredients) ? recipe.ingredients : [])
     ].join(' '));
+    const excluded = preferenceTokenList(state.preferences && state.preferences.excludedIngredients);
 
     if (query && !searchable.includes(query)) return false;
+    if (containsPreferenceToken(searchable, excluded)) return false;
     if (type && type !== 'all' && recipeMealType(recipe) !== type) return false;
     if (maxCalories !== null && numberValue(recipe.calories, 0) > maxCalories) return false;
     if (minProtein !== null && numberValue(recipe.protein, 0) < minProtein) return false;
@@ -3788,6 +3838,139 @@
     return 'Snack';
   }
 
+  function personalizeRecipeOrder(recipes) {
+    return [...recipes].sort((a, b) => {
+      const scoreDiff = recipePersonalization(b).score - recipePersonalization(a).score;
+      if (scoreDiff !== 0) return scoreDiff;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+  }
+
+  function recipePersonalization(recipe) {
+    const text = recipeSearchText(recipe);
+    const prefs = { ...defaultState.preferences, ...(state.preferences || {}) };
+    const liked = preferenceTokenList(`${prefs.likedFoods || ''}\n${prefs.favoriteDishes || ''}`);
+    const disliked = preferenceTokenList(prefs.dislikedFoods);
+    const excluded = preferenceTokenList(prefs.excludedIngredients);
+    const goal = state.settings.bodyGoal || 'maintain';
+    const calories = numberValue(recipe.calories, 0);
+    const protein = numberValue(recipe.protein, 0);
+    const carbs = numberValue(recipe.carbs, 0);
+    const time = numberValue(recipe.time, 0);
+    let score = 52;
+    const reasons = [];
+
+    if (isFavoriteRecipe(recipe.id)) {
+      score += 24;
+      reasons.push('ulubione');
+    }
+    if (containsPreferenceToken(text, excluded)) {
+      score -= 120;
+      reasons.push('wykluczone skladniki');
+    }
+    const likedHits = matchedPreferenceTokens(text, liked);
+    if (likedHits.length) {
+      score += Math.min(24, likedHits.length * 8);
+      reasons.push(`lubi: ${likedHits.slice(0, 2).join(', ')}`);
+    }
+    const dislikedHits = matchedPreferenceTokens(text, disliked);
+    if (dislikedHits.length) {
+      score -= Math.min(35, dislikedHits.length * 12);
+      reasons.push(`raczej nie: ${dislikedHits.slice(0, 2).join(', ')}`);
+    }
+
+    if (goal === 'lose_weight') {
+      if (calories > 0 && calories <= state.settings.calories * 0.34) {
+        score += 10;
+        reasons.push('pod redukcje');
+      }
+      if (protein >= 24) {
+        score += 10;
+        reasons.push('duzo bialka');
+      }
+    } else if (goal === 'muscle_gain') {
+      if (protein >= 30) {
+        score += 14;
+        reasons.push('masa: bialko');
+      }
+      if (calories >= state.settings.calories * 0.22) score += 5;
+    } else if (goal === 'health') {
+      if (calories <= state.settings.calories * 0.4 && protein >= 18) {
+        score += 10;
+        reasons.push('stabilny posilek');
+      }
+    }
+
+    if (prefs.dietStyle === 'high_protein' && protein >= 28) {
+      score += 12;
+      reasons.push('wysokobialkowe');
+    }
+    if (prefs.dietStyle === 'low_carb' && carbs > 0 && carbs <= 35) {
+      score += 12;
+      reasons.push('mniej wegli');
+    }
+    if (prefs.dietStyle === 'simple' && (!time || time <= 15)) {
+      score += 10;
+      reasons.push('szybkie');
+    }
+    if (prefs.dietStyle === 'vegetarian') {
+      const meatHits = matchedPreferenceTokens(text, ['kurczak', 'losos', 'ryba', 'tunczyk', 'wolowina', 'wieprzowina', 'szynka']);
+      if (meatHits.length) score -= 50;
+      else {
+        score += 12;
+        reasons.push('bez miesa');
+      }
+    }
+
+    return {
+      score: Math.max(0, Math.min(99, score)),
+      reasons: reasons.length ? reasons : ['neutralne dopasowanie']
+    };
+  }
+
+  function recipeSearchText(recipe) {
+    return normalize([
+      recipe && recipe.name,
+      recipe && recipe.description,
+      ...(Array.isArray(recipe && recipe.ingredients) ? recipe.ingredients : [])
+    ].join(' '));
+  }
+
+  function preferenceTokenList(value) {
+    return String(value || '')
+      .split(/[\n,;]+/g)
+      .map((item) => normalize(item).replace(/\s+/g, ' ').trim())
+      .filter((item) => item.length >= 3)
+      .slice(0, 40);
+  }
+
+  function matchedPreferenceTokens(text, tokens) {
+    const normalizedText = normalize(text);
+    return tokens.filter((token) => normalizedText.includes(token));
+  }
+
+  function containsPreferenceToken(text, tokens) {
+    return matchedPreferenceTokens(text, tokens).length > 0;
+  }
+
+  function isFavoriteRecipe(recipeId) {
+    return Boolean(recipeId && Array.isArray(state.favoriteRecipeIds) && state.favoriteRecipeIds.includes(recipeId));
+  }
+
+  function toggleFavoriteRecipe(recipeId) {
+    if (!recipeId) return;
+    if (!Array.isArray(state.favoriteRecipeIds)) state.favoriteRecipeIds = [];
+    if (state.favoriteRecipeIds.includes(recipeId)) {
+      state.favoriteRecipeIds = state.favoriteRecipeIds.filter((id) => id !== recipeId);
+      toast('Usunieto z ulubionych.');
+    } else {
+      state.favoriteRecipeIds.push(recipeId);
+      toast('Dodano do ulubionych.');
+    }
+    saveState();
+    render();
+  }
+
   function clearRecipeFilters() {
     $('recipe-search').value = '';
     $('recipe-type-filter').value = 'all';
@@ -3801,6 +3984,7 @@
     const add = event.target.closest('[data-recipe-add]');
     const plan = event.target.closest('[data-recipe-plan]');
     const shopping = event.target.closest('[data-recipe-shopping]');
+    const favorite = event.target.closest('[data-recipe-favorite]');
     const edit = event.target.closest('[data-recipe-edit]');
     const remove = event.target.closest('[data-recipe-delete]');
 
@@ -3822,6 +4006,11 @@
       const recipe = state.recipes.find((item) => item.id === shopping.dataset.recipeShopping);
       if (!recipe) return;
       addRecipeToShoppingList(recipe);
+      return;
+    }
+
+    if (favorite) {
+      toggleFavoriteRecipe(favorite.dataset.recipeFavorite);
       return;
     }
 
@@ -3951,6 +4140,208 @@
     const variant = button.dataset.paidRecipes;
     const label = variant === 'personalized' ? 'spersonalizowane przepisy' : 'standardowe przepisy';
     toast(`Opcja „${label}” jest na razie zablokowana. Płatności dodamy w kolejnym kroku.`);
+  }
+
+  async function generatePersonalRecipes() {
+    if (!canSync() || !syncSession) {
+      toast('Zaloguj sie, zeby wygenerowac przepisy AI.');
+      return;
+    }
+    const button = $('generate-ai-recipes');
+    button.disabled = true;
+    button.innerHTML = '<i data-lucide="loader-circle"></i> Generuje...';
+    refreshIcons();
+
+    try {
+      const context = buildRecipeRagContext();
+      const response = await requestPersonalRecipes(context);
+      state.aiRecipeSuggestions = normalizePersonalRecipeResponse(response);
+      saveState();
+      render();
+      toast('AI przygotowalo spersonalizowane propozycje.');
+    } catch (error) {
+      console.error(error);
+      toast(error.message || 'Nie udalo sie wygenerowac przepisow AI.');
+    } finally {
+      button.disabled = false;
+      button.innerHTML = '<i data-lucide="sparkles"></i> Generuj';
+      refreshIcons();
+    }
+  }
+
+  async function requestPersonalRecipes(context) {
+    const config = window.DIET_APP_CONFIG || {};
+    if (config.aiRecipeEndpoint) {
+      const response = await fetch(config.aiRecipeEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context })
+      });
+      if (!response.ok) throw new Error(`Backend AI zwrocil blad ${response.status}.`);
+      return response.json();
+    }
+
+    if (supabaseClient && syncSession) {
+      const { data, error } = await supabaseClient.functions.invoke('recommend-recipes', {
+        body: { context }
+      });
+      if (error) throw new Error(error.message || 'Funkcja AI zwrocila blad.');
+      return data;
+    }
+
+    throw new Error('Skonfiguruj Supabase i zaloguj sie.');
+  }
+
+  function buildRecipeRagContext() {
+    const stats = bodyStats();
+    const recentEntries = recentUniqueEntries(14, 20).map((entry) => ({
+      name: entry.foodName,
+      meal: entry.meal,
+      calories: Math.round(numberValue(entry.calories, 0)),
+      protein: round1(numberValue(entry.protein, 0)),
+      carbs: round1(numberValue(entry.carbs, 0)),
+      fat: round1(numberValue(entry.fat, 0))
+    }));
+    const rankedRecipes = personalizeRecipeOrder(state.recipes || []).slice(0, 10).map((recipe) => ({
+      name: recipe.name,
+      calories: Math.round(numberValue(recipe.calories, 0)),
+      protein: round1(numberValue(recipe.protein, 0)),
+      carbs: round1(numberValue(recipe.carbs, 0)),
+      fat: round1(numberValue(recipe.fat, 0)),
+      time: Math.round(numberValue(recipe.time, 0)),
+      ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients.slice(0, 8) : [],
+      fit: recipePersonalization(recipe).reasons.slice(0, 3)
+    }));
+
+    return {
+      locale: 'pl-PL',
+      date: currentDate,
+      profile: profileName(),
+      targets: {
+        calories: Math.round(numberValue(state.settings.calories, 0)),
+        protein: Math.round(numberValue(state.settings.protein, 0)),
+        carbs: Math.round(numberValue(state.settings.carbs, 0)),
+        fat: Math.round(numberValue(state.settings.fat, 0))
+      },
+      health: {
+        goal: state.settings.bodyGoal || 'maintain',
+        dietStyle: (state.preferences && state.preferences.dietStyle) || 'balanced',
+        weightKg: stats.weightKg || null,
+        heightCm: stats.heightCm || null,
+        age: stats.age || null,
+        tdee: stats.tdee ? Math.round(stats.tdee) : null
+      },
+      preferences: { ...defaultState.preferences, ...(state.preferences || {}) },
+      recentEntries,
+      retrievedRecipes: rankedRecipes,
+      instruction: 'Generate recipes that fit the user. Avoid excluded ingredients. Use liked foods when possible. Keep recipes easy to log.'
+    };
+  }
+
+  function recentUniqueEntries(days, limit) {
+    const since = addDays(currentDate, -Math.max(1, days));
+    const seen = new Set();
+    return [...(state.entries || [])]
+      .filter((entry) => entry.date >= since && entry.date <= currentDate && entry.foodName)
+      .sort((a, b) => String(b.createdAt || b.date || '').localeCompare(String(a.createdAt || a.date || '')))
+      .filter((entry) => {
+        const key = normalize(entry.foodName);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, limit);
+  }
+
+  function normalizePersonalRecipeResponse(response) {
+    const payload = response && response.result ? response.result : response;
+    const items = Array.isArray(payload && payload.suggestions) ? payload.suggestions : [];
+    return {
+      generatedAt: new Date().toISOString(),
+      summary: String(payload && payload.summary ? payload.summary : 'Propozycje dopasowane do profilu i preferencji.').trim(),
+      items: items.map(normalizeAIRecipeSuggestion).filter(Boolean).slice(0, 6)
+    };
+  }
+
+  function renderAIRecipes() {
+    const container = $('ai-recipes-list');
+    const summary = $('ai-recipes-summary');
+    if (!container || !summary) return;
+    const suggestions = normalizeAISuggestions(state.aiRecipeSuggestions);
+    const generated = suggestions.generatedAt ? `Wygenerowano: ${formatDateTime(suggestions.generatedAt)}.` : 'Kliknij Generuj, aby utworzyc propozycje z kontekstu profilu.';
+    summary.textContent = suggestions.summary || `${generated} RAG-lite uzywa celu, preferencji, ostatnich posilkow i zapisanych przepisow.`;
+    container.innerHTML = suggestions.items.length
+      ? suggestions.items.map(renderAIRecipeCard).join('')
+      : '<div class="empty-state">Brak propozycji AI. Uzupelnij preferencje i wygeneruj przepisy.</div>';
+  }
+
+  function renderAIRecipeCard(recipe) {
+    return `
+      <article class="ai-recipe-card">
+        <div class="recipe-icon"><i data-lucide="${recipeIcon(recipe)}"></i></div>
+        <div class="recipe-content">
+          <div class="recipe-title-row">
+            <h3>${escapeHTML(recipe.name)}</h3>
+            <span class="stat-chip">AI</span>
+          </div>
+          <p>${escapeHTML(recipe.fitReason || recipe.description || 'Dopasowana propozycja.')}</p>
+          <div class="recipe-meta">
+            <span>${Math.round(numberValue(recipe.calories, 0))} kcal</span>
+            <span>${round1(recipe.protein)} g bialka</span>
+            <span>${round1(recipe.carbs)} g wegli</span>
+            <span>${round1(recipe.fat)} g tluszczu</span>
+            ${numberValue(recipe.time, 0) ? `<span>${Math.round(numberValue(recipe.time, 0))} min</span>` : ''}
+          </div>
+          <div class="row-actions recipe-actions">
+            <button class="primary-button compact" type="button" data-ai-recipe-save="${recipe.id}">
+              <i data-lucide="save"></i>
+              Zapisz
+            </button>
+            <button class="secondary-button compact" type="button" data-ai-recipe-plan="${recipe.id}">
+              <i data-lucide="calendar-plus"></i>
+              Do planu
+            </button>
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  function handleAIRecipeAction(event) {
+    const save = event.target.closest('[data-ai-recipe-save]');
+    const plan = event.target.closest('[data-ai-recipe-plan]');
+    if (!save && !plan) return;
+    const id = save ? save.dataset.aiRecipeSave : plan.dataset.aiRecipePlan;
+    const suggestion = (normalizeAISuggestions(state.aiRecipeSuggestions).items || []).find((item) => item.id === id);
+    if (!suggestion) return;
+    const recipe = saveAIRecipeSuggestion(suggestion, Boolean(plan));
+    if (plan) recipeToPlannedMeal(recipe, currentDate);
+  }
+
+  function saveAIRecipeSuggestion(suggestion, silent = false) {
+    const recipe = {
+      ...suggestion,
+      id: suggestion.savedRecipeId || uid(),
+      mealType: suggestion.mealType || 'Lunch',
+      description: suggestion.description || suggestion.fitReason || 'Przepis wygenerowany przez AI na podstawie profilu.',
+      custom: true,
+      aiGenerated: true,
+      updatedAt: new Date().toISOString()
+    };
+    const existingIndex = state.recipes.findIndex((item) => normalize(item.name) === normalize(recipe.name));
+    if (existingIndex >= 0) {
+      recipe.id = state.recipes[existingIndex].id;
+      state.recipes[existingIndex] = { ...state.recipes[existingIndex], ...recipe };
+    } else {
+      state.recipes.push(recipe);
+    }
+    addRecipeAsFood(recipe);
+    saveState();
+    if (!silent) {
+      render();
+      toast('Przepis AI zapisany.');
+    }
+    return recipe;
   }
 
   function addRecipeToDiary(recipe) {
@@ -4261,12 +4652,30 @@
 
   function saveSettings(event) {
     event.preventDefault();
-    state.settings = {
+    const nextSettings = readSettingsForm();
+    if (nextSettings.autoTargets) {
+      const smart = calculateSmartTargets(nextSettings);
+      if (smart) {
+        Object.assign(nextSettings, smart.targets);
+      } else {
+        toast('Nie moge przeliczyc celu bez aktualnej wagi i wzrostu. Zapisuje wartosci reczne.');
+      }
+    }
+    state.settings = nextSettings;
+    saveState();
+    applyTheme();
+    render();
+    toast('Cele zapisane.');
+  }
+
+  function readSettingsForm() {
+    return {
       heightCm: numberValue($('profile-height').value, 0),
       age: numberValue($('profile-age').value, 35),
       sex: $('profile-sex').value === 'male' ? 'male' : 'female',
       activityLevel: $('profile-activity-level').value || 'light',
       bodyGoal: $('profile-goal').value || '',
+      autoTargets: Boolean($('profile-auto-targets').checked),
       theme: $('profile-theme').value === 'dark' ? 'dark' : 'light',
       calories: numberValue($('target-calories').value, 2200),
       protein: numberValue($('target-protein').value, 160),
@@ -4274,10 +4683,22 @@
       fat: numberValue($('target-fat').value, 70),
       water: numberValue($('target-water').value, 2500)
     };
-    saveState();
-    applyTheme();
-    render();
-    toast('Cele zapisane.');
+  }
+
+  function applySmartTargetsFromSettings() {
+    const smart = calculateSmartTargets(readSettingsForm());
+    if (!smart) {
+      toast('Dodaj wage, wzrost i wiek, zeby przeliczyc cel.');
+      return;
+    }
+    $('target-calories').value = smart.targets.calories;
+    $('target-protein').value = smart.targets.protein;
+    $('target-carbs').value = smart.targets.carbs;
+    $('target-fat').value = smart.targets.fat;
+    $('target-water').value = smart.targets.water;
+    $('profile-auto-targets').checked = true;
+    updateSmartTargetNote(smart);
+    toast('Przeliczono cel. Sprawdz i zapisz.');
   }
 
   function renderSettings() {
@@ -4286,12 +4707,15 @@
     $('profile-sex').value = state.settings.sex === 'male' ? 'male' : 'female';
     $('profile-activity-level').value = state.settings.activityLevel || 'light';
     $('profile-goal').value = state.settings.bodyGoal || '';
+    $('profile-auto-targets').checked = Boolean(state.settings.autoTargets);
     $('profile-theme').value = currentTheme();
     $('target-calories').value = state.settings.calories;
     $('target-protein').value = state.settings.protein;
     $('target-carbs').value = state.settings.carbs;
     $('target-fat').value = state.settings.fat;
     $('target-water').value = state.settings.water;
+    updateSmartTargetNote(calculateSmartTargets(state.settings));
+    renderPreferencesForm();
 
     const goals = { ...defaultState.habitGoals, ...(state.habitGoals || {}) };
     $('habit-logging-days').value = goals.loggingDays;
@@ -4300,6 +4724,78 @@
     $('habit-protein-days').value = goals.proteinDays;
     $('habit-reminder-morning').checked = Boolean(goals.reminderMorning);
     $('habit-reminder-evening').checked = Boolean(goals.reminderEvening);
+  }
+
+  function calculateSmartTargets(settingsOverride = state.settings) {
+    const settings = { ...defaultState.settings, ...(settingsOverride || {}) };
+    const weight = latestWeightBefore(currentDate);
+    const weightKg = numberValue(weight && weight.weight, 0);
+    const heightCm = numberValue(settings.heightCm, 0);
+    const age = numberValue(settings.age, 0);
+    if (weightKg <= 0 || heightCm <= 0 || age <= 0) return null;
+
+    const sex = settings.sex === 'male' ? 'male' : 'female';
+    const bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * age) + (sex === 'male' ? 5 : -161);
+    const tdee = bmr * activityMultiplier(settings.activityLevel);
+    const goal = settings.bodyGoal || 'maintain';
+    const calorieFactor = {
+      lose_weight: 0.82,
+      maintain: 1,
+      muscle_gain: 1.1,
+      health: 0.95
+    }[goal] || 1;
+    const minCalories = Math.max(1200, Math.round(bmr * 1.05));
+    const calories = Math.max(minCalories, Math.round((tdee * calorieFactor) / 10) * 10);
+    const proteinPerKg = goal === 'muscle_gain' ? 1.9 : (goal === 'lose_weight' ? 1.8 : 1.5);
+    const fatPerKg = goal === 'low_carb' ? 1 : 0.8;
+    const protein = Math.round(weightKg * proteinPerKg);
+    const fat = Math.max(35, Math.round(weightKg * fatPerKg));
+    const usedCalories = (protein * 4) + (fat * 9);
+    const carbs = Math.max(60, Math.round((calories - usedCalories) / 4));
+    const water = Math.round(Math.min(3800, Math.max(2000, weightKg * 35)) / 50) * 50;
+
+    return {
+      bmr,
+      tdee,
+      goal,
+      targets: { calories, protein, carbs, fat, water }
+    };
+  }
+
+  function updateSmartTargetNote(smart) {
+    const note = $('smart-target-note');
+    if (!note) return;
+    if (!smart) {
+      note.textContent = 'Podaj wage, wzrost, wiek i aktywnosc, a aplikacja wyliczy sensowny punkt startowy.';
+      return;
+    }
+    note.textContent = `BMR ok. ${Math.round(smart.bmr)} kcal, TDEE ok. ${Math.round(smart.tdee)} kcal. Propozycja: ${smart.targets.calories} kcal, ${smart.targets.protein} g bialka.`;
+  }
+
+  function renderPreferencesForm() {
+    const prefs = { ...defaultState.preferences, ...(state.preferences || {}) };
+    if (!$('preference-diet-style')) return;
+    $('preference-diet-style').value = prefs.dietStyle || 'balanced';
+    $('preference-liked-foods').value = prefs.likedFoods || '';
+    $('preference-disliked-foods').value = prefs.dislikedFoods || '';
+    $('preference-excluded-ingredients').value = prefs.excludedIngredients || '';
+    $('preference-favorite-dishes').value = prefs.favoriteDishes || '';
+    $('preference-recipe-notes').value = prefs.recipeNotes || '';
+  }
+
+  function savePreferences(event) {
+    event.preventDefault();
+    state.preferences = {
+      dietStyle: $('preference-diet-style').value || 'balanced',
+      likedFoods: $('preference-liked-foods').value.trim(),
+      dislikedFoods: $('preference-disliked-foods').value.trim(),
+      excludedIngredients: $('preference-excluded-ingredients').value.trim(),
+      favoriteDishes: $('preference-favorite-dishes').value.trim(),
+      recipeNotes: $('preference-recipe-notes').value.trim()
+    };
+    saveState();
+    render();
+    toast('Personalizacja zapisana.');
   }
 
   function saveHabitGoals(event) {
@@ -5448,10 +5944,49 @@
         ? rawState.weeklyReviews
         : {},
       habitGoals: { ...defaultState.habitGoals, ...((rawState && rawState.habitGoals) || {}) },
+      preferences: {
+        ...defaultState.preferences,
+        ...((rawState && rawState.preferences && typeof rawState.preferences === 'object' && !Array.isArray(rawState.preferences)) ? rawState.preferences : {})
+      },
+      favoriteRecipeIds: Array.isArray(rawState && rawState.favoriteRecipeIds) ? uniqueStrings(rawState.favoriteRecipeIds) : [],
+      aiRecipeSuggestions: normalizeAISuggestions(rawState && rawState.aiRecipeSuggestions),
       undoStack: trimUndoStack(Array.isArray(rawState && rawState.undoStack) ? rawState.undoStack : []),
       backupMeta: rawState && rawState.backupMeta && typeof rawState.backupMeta === 'object' && !Array.isArray(rawState.backupMeta)
         ? rawState.backupMeta
         : null
+    };
+  }
+
+  function normalizeAISuggestions(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    return {
+      generatedAt: typeof source.generatedAt === 'string' ? source.generatedAt : '',
+      summary: typeof source.summary === 'string' ? source.summary : '',
+      items: Array.isArray(source.items)
+        ? source.items.map(normalizeAIRecipeSuggestion).filter(Boolean)
+        : []
+    };
+  }
+
+  function normalizeAIRecipeSuggestion(recipe) {
+    if (!recipe || typeof recipe !== 'object') return null;
+    const name = String(recipe.name || '').trim();
+    if (!name) return null;
+    return {
+      id: recipe.id || uid(),
+      name,
+      description: String(recipe.description || recipe.fit_reason || '').trim(),
+      mealType: MEALS.includes(recipe.mealType) ? recipe.mealType : (MEALS.includes(recipe.meal_type) ? recipe.meal_type : 'Lunch'),
+      calories: Math.max(0, numberValue(recipe.calories, 0)),
+      protein: Math.max(0, numberValue(recipe.protein, 0)),
+      carbs: Math.max(0, numberValue(recipe.carbs, 0)),
+      fat: Math.max(0, numberValue(recipe.fat, 0)),
+      time: Math.max(0, numberValue(recipe.time, 0)),
+      ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 12) : [],
+      steps: Array.isArray(recipe.steps) ? recipe.steps.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8) : [],
+      fitReason: String(recipe.fitReason || recipe.fit_reason || '').trim(),
+      aiGenerated: true,
+      createdAt: recipe.createdAt || new Date().toISOString()
     };
   }
 

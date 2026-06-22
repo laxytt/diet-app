@@ -874,6 +874,20 @@
             </div>
           </section>
 
+          <section class="panel ai-recipes-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>AI dopasuje przepisy</h2>
+                <p id="ai-recipes-summary" class="storage-note">Uzywa celu, preferencji, ostatnich posilkow i Twoich przepisow jako kontekstu RAG.</p>
+              </div>
+              <button class="primary-button compact" id="generate-ai-recipes" type="button">
+                <i data-lucide="sparkles"></i>
+                Generuj
+              </button>
+            </div>
+            <div id="ai-recipes-list" class="ai-recipes-list"></div>
+          </section>
+
           <section class="recipe-grid" id="recipe-list" aria-label="Lista przepisów">
             <article class="recipe-card">
               <div class="recipe-icon"><i data-lucide="salad"></i></div>
@@ -1188,6 +1202,20 @@
                     <option value="health">Zdrowsze nawyki</option>
                   </select>
                 </label>
+                <label class="toggle-row wide">
+                  <input id="profile-auto-targets" type="checkbox">
+                  <span>Automatycznie dopasuj kalorie i makro do celu</span>
+                </label>
+                <div class="wide smart-target-box">
+                  <div>
+                    <strong>Inteligentny cel</strong>
+                    <p id="smart-target-note">Podaj wage, wzrost, wiek i aktywnosc, a aplikacja wyliczy sensowny punkt startowy.</p>
+                  </div>
+                  <button class="secondary-button compact" id="apply-smart-targets" type="button">
+                    <i data-lucide="calculator"></i>
+                    Przelicz
+                  </button>
+                </div>
                 <label>
                   <span>Wygląd</span>
                   <select id="profile-theme">
@@ -1218,6 +1246,49 @@
                 <button class="primary-button" type="submit">
                   <i data-lucide="save"></i>
                   Zapisz cele
+                </button>
+              </form>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Personalizacja</h2>
+                <span class="stat-chip">AI / RAG</span>
+              </div>
+              <form id="preferences-form" class="settings-form">
+                <label>
+                  <span>Styl jedzenia</span>
+                  <select id="preference-diet-style">
+                    <option value="balanced">Zbilansowany</option>
+                    <option value="high_protein">Wysokobialkowy</option>
+                    <option value="vegetarian">Wegetarianski</option>
+                    <option value="low_carb">Mniej weglowodanow</option>
+                    <option value="simple">Prosto i szybko</option>
+                  </select>
+                </label>
+                <label class="wide">
+                  <span>Ulubione potrawy i produkty</span>
+                  <textarea id="preference-liked-foods" placeholder="Np. skyr, kurczak, truskawki, zupy, szybkie obiady"></textarea>
+                </label>
+                <label class="wide">
+                  <span>Czego nie lubisz</span>
+                  <textarea id="preference-disliked-foods" placeholder="Np. tunczyk, owsianka, ostre przyprawy"></textarea>
+                </label>
+                <label class="wide">
+                  <span>Wykluczone skladniki</span>
+                  <textarea id="preference-excluded-ingredients" placeholder="Np. orzechy, laktoza, wieprzowina"></textarea>
+                </label>
+                <label class="wide">
+                  <span>Ulubione dania do inspirowania przepisow</span>
+                  <textarea id="preference-favorite-dishes" placeholder="Np. salatka z kurczakiem, kanapki, skyr z owocami"></textarea>
+                </label>
+                <label class="wide">
+                  <span>Dodatkowe notatki dla AI</span>
+                  <textarea id="preference-recipe-notes" placeholder="Np. malo gotowania, tanie skladniki, posilki do pracy"></textarea>
+                </label>
+                <button class="secondary-button wide" type="submit">
+                  <i data-lucide="sliders-horizontal"></i>
+                  Zapisz personalizacje
                 </button>
               </form>
             </div>
