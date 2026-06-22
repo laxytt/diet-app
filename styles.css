@@ -2525,6 +2525,14 @@ th {
     grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
   }
 
+  .admin-grid {
+    grid-template-columns: minmax(0, 1.3fr) minmax(330px, 0.7fr);
+  }
+
+  .admin-users-panel {
+    grid-row: span 2;
+  }
+
   .recipes-hero h2 {
     font-size: 1.8rem;
   }
@@ -2814,6 +2822,115 @@ th {
 
 .sync-meta strong {
   overflow-wrap: anywhere;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.admin-users-panel {
+  min-width: 0;
+}
+
+.admin-status-note {
+  margin-bottom: 12px;
+  color: var(--muted);
+}
+
+.admin-user-list,
+.admin-audit-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-user-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.88);
+  padding: 12px;
+}
+
+.admin-user-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.admin-user-main strong,
+.admin-user-main span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-user-main > span:not(.admin-status),
+.admin-user-stats,
+.admin-audit-row span,
+.admin-audit-row small {
+  color: var(--muted);
+}
+
+.admin-status {
+  width: max-content;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 9px;
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.admin-status-active {
+  background: var(--green-soft);
+  color: var(--green-dark);
+}
+
+.admin-status-disabled {
+  background: var(--amber-soft);
+  color: #7a501b;
+}
+
+.admin-status-banned {
+  background: #f7e1df;
+  color: var(--danger);
+}
+
+.admin-user-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  font-size: 0.82rem;
+}
+
+.admin-user-stats span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.admin-audit-row {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.74);
+  padding: 10px;
 }
 
 .toggle-row {
@@ -3543,6 +3660,8 @@ th {
 :root[data-theme="dark"] .sync-meta div,
 :root[data-theme="dark"] .activity-item,
 :root[data-theme="dark"] .barcode-card,
+:root[data-theme="dark"] .admin-user-card,
+:root[data-theme="dark"] .admin-audit-row,
 :root[data-theme="dark"] .chart-tooltip {
   background: rgba(23, 32, 25, 0.9);
   border-color: var(--line);
@@ -3602,4 +3721,13 @@ th {
 
 :root[data-theme="dark"] .macro-warning {
   color: #ffd899;
+}
+
+:root[data-theme="dark"] .admin-status-disabled {
+  color: #ffd899;
+}
+
+:root[data-theme="dark"] .admin-status-banned {
+  background: #351f1d;
+  color: var(--danger);
 }

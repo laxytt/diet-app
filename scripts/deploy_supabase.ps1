@@ -22,6 +22,7 @@ if ([string]::IsNullOrWhiteSpace($env:OPENAI_API_KEY)) {
 & $supabase link --project-ref $ProjectRef
 & $supabase db push
 & $supabase functions deploy analyze-meal
+& $supabase functions deploy admin-api
 & $supabase secrets set "OPENAI_API_KEY=$env:OPENAI_API_KEY" "OPENAI_MODEL=$OpenAIModel"
 
 Write-Host "supabase-deploy-ok"

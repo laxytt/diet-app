@@ -173,6 +173,14 @@
   let sessionRefreshPromise = null;
   let reminderTimer = 0;
   let mobileAccordionPrepared = false;
+  let isAdmin = false;
+  let adminState = {
+    loading: false,
+    loaded: false,
+    error: '',
+    users: [],
+    logs: []
+  };
 
   const $ = (id) => document.getElementById(id);
 
@@ -190,6 +198,7 @@
     updateSyncUI();
     await refreshSupabaseSession();
     if (canSync()) await loadAssignedProfile();
+    await refreshAdminAccess();
     isAuthInitializing = false;
     updateSyncUI();
     render();
@@ -350,6 +359,9 @@
     $('settings-form').addEventListener('submit', saveSettings);
     $('habit-goals-form').addEventListener('submit', saveHabitGoals);
     $('logout-button').addEventListener('click', logoutUser);
+    $('admin-refresh').addEventListener('click', loadAdminDashboard);
+    $('admin-assignment-form').addEventListener('submit', saveAdminAssignment);
+    $('admin-user-list').addEventListener('click', handleAdminUserAction);
     $('avatar-input').addEventListener('change', handleAvatarUpload);
     $('remove-avatar').addEventListener('click', removeAvatar);
     $('export-json').addEventListener('click', exportJSON);
@@ -399,6 +411,8 @@
     renderTrendSummary();
     renderWeeklyReview();
     renderForecastPanel();
+    updateAdminVisibility();
+    renderAdminDashboard();
     updateSyncUI();
     updateEntryPreview();
     renderCharts();
@@ -413,7 +427,12 @@
   }
 
   function switchView(view) {
-    const moreViews = ['recipes', 'trends', 'import', 'settings'];
+    if (view === 'admin' && !isAdmin) {
+      toast('Brak uprawnień administratora.');
+      return;
+    }
+
+    const moreViews = ['recipes', 'trends', 'import', 'settings', 'admin'];
     document.querySelectorAll('.tab-button[data-view]').forEach((button) => {
       button.classList.toggle('active', button.dataset.view === view);
     });
@@ -426,6 +445,7 @@
       renderCharts();
       refreshIcons();
     });
+    if (view === 'admin' && !adminState.loaded && !adminState.loading) loadAdminDashboard();
   }
 
   function toggleMobileMoreMenu() {
@@ -582,6 +602,7 @@
         updateSyncUI();
         renderProfileBadge();
       }
+      await refreshAdminAccess();
     });
   }
 
@@ -627,6 +648,7 @@
       const { data, error } = await supabaseClient.auth.getSession();
       if (!error) syncSession = data.session;
       if (canSync() && !currentProfileAssignment) await loadAssignedProfile();
+      await refreshAdminAccess();
       updateSyncUI();
       renderProfileBadge();
     })().finally(() => {
@@ -650,7 +672,7 @@
 
     syncStatus.classList.remove('online', 'error');
     if (logoutButton) logoutButton.hidden = !syncSession;
-    const locked = Boolean(supabaseClient && (isAuthInitializing || passwordRecoveryMode || !syncSession || !currentProfileAssignment));
+    const locked = Boolean(supabaseClient && (isAuthInitializing || passwordRecoveryMode || !syncSession || (!currentProfileAssignment && !isAdmin)));
     if (appShell) appShell.classList.toggle('locked', locked);
     if (appShell) appShell.classList.toggle('auth-mode', locked);
     if (appShell) appShell.classList.toggle('auth-loading', Boolean(supabaseClient && isAuthInitializing));
@@ -681,6 +703,245 @@
 
     syncStatus.textContent = isRemoteLoading ? 'Synchronizacja' : 'Online';
     syncStatus.classList.add('online');
+  }
+
+  async function refreshAdminAccess() {
+    if (!canSync()) {
+      isAdmin = false;
+      updateAdminVisibility();
+      return;
+    }
+
+    try {
+      const result = await callAdminApi('me', {}, { quiet: true });
+      isAdmin = Boolean(result && result.admin);
+    } catch (error) {
+      isAdmin = false;
+    }
+    updateAdminVisibility();
+    updateSyncUI();
+  }
+
+  function updateAdminVisibility() {
+    document.querySelectorAll('[data-admin-only]').forEach((node) => {
+      node.hidden = !isAdmin;
+    });
+    if (!isAdmin && document.querySelector('#view-admin.active')) {
+      switchView('dashboard');
+    }
+  }
+
+  async function callAdminApi(action, payload = {}, options = {}) {
+    if (!canSync()) {
+      if (!options.quiet) toast('Zaloguj się, żeby użyć panelu admina.');
+      return null;
+    }
+
+    const session = syncSession || (await supabaseClient.auth.getSession()).data.session;
+    if (!session || !session.access_token) {
+      if (!options.quiet) toast('Sesja wygasła. Zaloguj się ponownie.');
+      return null;
+    }
+
+    const { data, error } = await supabaseClient.functions.invoke('admin-api', {
+      body: { action, ...payload },
+      headers: {
+        Authorization: `Bearer ${session.access_token}`
+      }
+    });
+
+    if (error) {
+      if (!options.quiet) toast(`Admin: ${error.message}`);
+      throw error;
+    }
+    if (data && data.error) {
+      const adminError = new Error(data.error);
+      if (!options.quiet) toast(`Admin: ${data.error}`);
+      throw adminError;
+    }
+    return data;
+  }
+
+  async function loadAdminDashboard() {
+    if (!isAdmin) {
+      toast('Brak uprawnień administratora.');
+      return;
+    }
+
+    adminState = { ...adminState, loading: true, error: '' };
+    renderAdminDashboard();
+    try {
+      const result = await callAdminApi('list');
+      adminState = {
+        loading: false,
+        loaded: true,
+        error: '',
+        users: Array.isArray(result && result.users) ? result.users : [],
+        logs: Array.isArray(result && result.logs) ? result.logs : []
+      };
+    } catch (error) {
+      adminState = { ...adminState, loading: false, loaded: true, error: error.message || 'Nie udało się pobrać panelu admina.' };
+    }
+    renderAdminDashboard();
+    refreshIcons();
+  }
+
+  function renderAdminDashboard() {
+    const list = $('admin-user-list');
+    const count = $('admin-user-count');
+    const note = $('admin-status-note');
+    const auditList = $('admin-audit-list');
+    if (!list || !count || !note || !auditList) return;
+
+    if (!isAdmin) {
+      count.textContent = '0';
+      note.textContent = 'Ten panel jest dostępny tylko dla administratora.';
+      list.innerHTML = '';
+      auditList.innerHTML = '<div class="empty-state">Brak dostępu.</div>';
+      return;
+    }
+
+    count.textContent = String(adminState.users.length);
+    if (adminState.loading) {
+      note.textContent = 'Ładuję użytkowników i log audytu...';
+      list.innerHTML = '<div class="empty-state">Ładowanie...</div>';
+    } else if (adminState.error) {
+      note.textContent = adminState.error;
+      list.innerHTML = '<div class="empty-state">Nie udało się pobrać danych admina.</div>';
+    } else if (!adminState.loaded) {
+      note.textContent = 'Kliknij odśwież, żeby pobrać aktualny stan.';
+      list.innerHTML = '<div class="empty-state">Dane nie są jeszcze pobrane.</div>';
+    } else if (!adminState.users.length) {
+      note.textContent = 'Brak użytkowników.';
+      list.innerHTML = '<div class="empty-state">Nie znaleziono kont.</div>';
+    } else {
+      note.textContent = `Ostatnie odświeżenie: ${formatDateTime(new Date().toISOString())}`;
+      list.innerHTML = adminState.users.map(renderAdminUserCard).join('');
+    }
+
+    auditList.innerHTML = adminState.logs.length
+      ? adminState.logs.map(renderAuditRow).join('')
+      : '<div class="empty-state">Brak akcji admina.</div>';
+  }
+
+  function renderAdminUserCard(user) {
+    const assignment = user.assignment || {};
+    const profile = user.profile || {};
+    const stats = profile.stats || {};
+    const status = assignment.status || 'no-access';
+    const statusLabel = adminStatusLabel(status);
+    const confirmed = user.confirmedAt ? 'Potwierdzony' : 'Niepotwierdzony';
+    return `
+      <article class="admin-user-card" data-admin-email="${escapeHTML(user.email)}">
+        <div class="admin-user-main">
+          <span class="admin-status admin-status-${escapeHTML(status)}">${statusLabel}</span>
+          <strong>${escapeHTML(user.email || 'brak emaila')}</strong>
+          <span>${escapeHTML(assignment.name || 'Brak przypisanego profilu')} · ${confirmed}</span>
+        </div>
+        <div class="admin-user-stats">
+          <span>${Math.round(numberValue(stats.entries, 0))} wpisów</span>
+          <span>${Math.round(numberValue(stats.foods, 0))} produktów</span>
+          <span>rev ${Math.round(numberValue(profile.revision, 0))}</span>
+          <span>${profile.updatedAt ? formatDateTime(profile.updatedAt) : 'brak profilu'}</span>
+        </div>
+        <div class="admin-user-actions">
+          <button class="secondary-button compact" type="button" data-admin-edit>
+            <i data-lucide="pencil"></i>
+            Edytuj
+          </button>
+          <button class="secondary-button compact" type="button" data-admin-status="active">
+            <i data-lucide="check"></i>
+            Aktywuj
+          </button>
+          <button class="ghost-button compact" type="button" data-admin-status="disabled">
+            <i data-lucide="pause"></i>
+            Wyłącz
+          </button>
+          <button class="danger-button compact" type="button" data-admin-status="banned">
+            <i data-lucide="ban"></i>
+            Ban
+          </button>
+          <button class="danger-button compact" type="button" data-admin-reset>
+            <i data-lucide="rotate-ccw"></i>
+            Reset postępów
+          </button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderAuditRow(log) {
+    return `
+      <article class="admin-audit-row">
+        <strong>${escapeHTML(log.action || 'akcja')}</strong>
+        <span>${escapeHTML(log.target_email || '-')} · ${escapeHTML(log.actor_email || '-')}</span>
+        <small>${log.created_at ? formatDateTime(log.created_at) : '-'}</small>
+      </article>
+    `;
+  }
+
+  function adminStatusLabel(status) {
+    if (status === 'active') return 'Aktywny';
+    if (status === 'disabled') return 'Wyłączony';
+    if (status === 'banned') return 'Ban';
+    return 'Brak dostępu';
+  }
+
+  async function saveAdminAssignment(event) {
+    event.preventDefault();
+    const email = $('admin-user-email').value.trim().toLowerCase();
+    const name = $('admin-user-name').value.trim();
+    const status = $('admin-user-status').value;
+    const notes = $('admin-user-notes').value.trim();
+    if (!email) {
+      toast('Podaj email użytkownika.');
+      return;
+    }
+
+    await callAdminApi('upsertAssignment', { email, name, status, notes });
+    toast('Dostęp użytkownika zapisany.');
+    await loadAdminDashboard();
+  }
+
+  async function handleAdminUserAction(event) {
+    const card = event.target.closest('[data-admin-email]');
+    if (!card) return;
+    const email = card.dataset.adminEmail;
+    const user = adminState.users.find((item) => item.email === email);
+    if (!email || !user) return;
+
+    if (event.target.closest('[data-admin-edit]')) {
+      const assignment = user.assignment || {};
+      $('admin-user-email').value = user.email || '';
+      $('admin-user-name').value = assignment.name || '';
+      $('admin-user-status').value = assignment.status || 'active';
+      $('admin-user-notes').value = assignment.notes || '';
+      $('admin-user-email').focus();
+      return;
+    }
+
+    const statusButton = event.target.closest('[data-admin-status]');
+    if (statusButton) {
+      const status = statusButton.dataset.adminStatus;
+      await callAdminApi('setStatus', { email, status });
+      toast(`Status ustawiony: ${adminStatusLabel(status)}.`);
+      await loadAdminDashboard();
+      return;
+    }
+
+    if (event.target.closest('[data-admin-reset]')) {
+      const confirmed = window.confirm(`Zresetować postępy użytkownika ${email}? Backup zostanie zapisany w Supabase.`);
+      if (!confirmed) return;
+      const result = await callAdminApi('resetProgress', { email });
+      toast('Postępy zresetowane i backup zapisany.');
+      if (syncSession && syncSession.user && syncSession.user.email && syncSession.user.email.toLowerCase() === email) {
+        state = normalizeState({});
+        localStorage.setItem(storageKey(currentProfileId), JSON.stringify(state));
+        if (result && Number.isFinite(Number(result.revision))) setRemoteRevision(currentProfileId, Number(result.revision));
+        render();
+      }
+      await loadAdminDashboard();
+    }
   }
 
   function submitAuthForm(event) {
@@ -727,10 +988,11 @@
     passwordRecoveryMode = false;
     updateSyncUI();
     await loadAssignedProfile();
+    await refreshAdminAccess();
     setAuthBusy(source, false);
-    if (!currentProfileAssignment) return;
+    if (!currentProfileAssignment && !isAdmin) return;
     setAuthMode('login');
-    toast('Zalogowano i włączono synchronizację.');
+    toast(currentProfileAssignment ? 'Zalogowano i włączono synchronizację.' : 'Zalogowano jako administrator.');
   }
 
   async function loginWithGoogle(event) {
@@ -812,6 +1074,7 @@
     syncSession = data.session;
     if (data.session) {
       await loadAssignedProfile();
+      await refreshAdminAccess();
       applySignupProfileToState(signupProfile);
     }
     setAuthBusy(source, false);
@@ -1142,6 +1405,8 @@
     }
     syncSession = null;
     currentProfileAssignment = null;
+    isAdmin = false;
+    adminState = { loading: false, loaded: false, error: '', users: [], logs: [] };
     remoteReady = false;
     passwordRecoveryMode = false;
     setAuthMode('login');
@@ -1168,7 +1433,7 @@
       const { data, error } = await withTimeout(
         supabaseClient
           .from(ASSIGNMENTS_TABLE)
-          .select('profile_id, name')
+          .select('profile_id, name, status')
           .maybeSingle(),
         12000,
         'Nie udało się pobrać przypisanego profilu. Sprawdź połączenie i spróbuj ponownie.'
@@ -1178,6 +1443,11 @@
       const assignment = data;
       if (!assignment || !isKnownProfileId(assignment.profile_id)) {
         throw new Error('Ten email nie ma przypisanego profilu. Poproś właściciela aplikacji o dostęp.');
+      }
+      if (assignment.status && assignment.status !== 'active') {
+        throw new Error(assignment.status === 'banned'
+          ? 'Ten profil jest zablokowany przez administratora.'
+          : 'Dostęp do tego profilu jest wyłączony.');
       }
 
       currentProfileAssignment = assignment;

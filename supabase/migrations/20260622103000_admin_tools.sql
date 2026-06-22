@@ -1,31 +1,43 @@
-create table if not exists public.profile_assignments (
-  email text primary key,
-  user_id uuid references auth.users(id) on delete set null,
-  profile_id text not null check (profile_id = 'agnieszka'),
-  name text not null,
-  status text not null default 'active' check (status in ('active', 'disabled', 'banned')),
-  notes text not null default '',
-  status_updated_at timestamptz not null default now(),
-  status_updated_by uuid references auth.users(id) on delete set null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+alter table public.profile_assignments
+add column if not exists user_id uuid references auth.users(id) on delete set null;
 
-create table if not exists public.diet_profiles (
-  user_id uuid not null references auth.users(id) on delete cascade,
-  profile_id text not null check (profile_id = 'agnieszka'),
-  name text not null,
-  data jsonb not null default '{}'::jsonb,
-  revision bigint not null default 0,
-  updated_at timestamptz not null default now(),
-  primary key (user_id, profile_id)
-);
+alter table public.profile_assignments
+add column if not exists status text not null default 'active';
+
+alter table public.profile_assignments
+add column if not exists notes text not null default '';
+
+alter table public.profile_assignments
+add column if not exists status_updated_at timestamptz not null default now();
+
+alter table public.profile_assignments
+add column if not exists status_updated_by uuid references auth.users(id) on delete set null;
+
+alter table public.profile_assignments
+drop constraint if exists profile_assignments_status_check;
+
+alter table public.profile_assignments
+add constraint profile_assignments_status_check
+check (status in ('active', 'disabled', 'banned'));
+
+update public.profile_assignments pa
+set user_id = au.id
+from auth.users au
+where pa.user_id is null
+  and lower(pa.email) = lower(au.email);
+
+create index if not exists profile_assignments_user_id_idx
+on public.profile_assignments (user_id);
 
 create table if not exists public.admin_users (
   email text primary key,
   created_at timestamptz not null default now(),
   created_by uuid references auth.users(id) on delete set null
 );
+
+insert into public.admin_users (email)
+values ('laxytt@gmail.com')
+on conflict (email) do nothing;
 
 create table if not exists public.admin_profile_backups (
   id bigserial primary key,
@@ -39,6 +51,9 @@ create table if not exists public.admin_profile_backups (
   created_at timestamptz not null default now()
 );
 
+create index if not exists admin_profile_backups_target_idx
+on public.admin_profile_backups (target_email, created_at desc);
+
 create table if not exists public.admin_audit_log (
   id bigserial primary key,
   actor_user_id uuid references auth.users(id) on delete set null,
@@ -50,12 +65,9 @@ create table if not exists public.admin_audit_log (
   created_at timestamptz not null default now()
 );
 
-insert into public.admin_users (email)
-values ('laxytt@gmail.com')
-on conflict (email) do nothing;
+create index if not exists admin_audit_log_created_idx
+on public.admin_audit_log (created_at desc);
 
-alter table public.profile_assignments enable row level security;
-alter table public.diet_profiles enable row level security;
 alter table public.admin_users enable row level security;
 alter table public.admin_profile_backups enable row level security;
 alter table public.admin_audit_log enable row level security;

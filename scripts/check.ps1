@@ -31,6 +31,9 @@ print("html-local-refs-ok")
 
 if (Test-Path ".\.tools\deno\deno.exe") {
   .\.tools\deno\deno.exe check supabase\functions\analyze-meal\index.ts
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  .\.tools\deno\deno.exe check supabase\functions\admin-api\index.ts
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } else {
   Write-Warning "Deno portable not found; skipping Edge Function check."
 }

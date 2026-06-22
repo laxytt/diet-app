@@ -197,6 +197,10 @@
           <i data-lucide="sliders-horizontal"></i>
           <span>Ustawienia</span>
         </button>
+        <button class="tab-button mobile-extra-tab admin-only" type="button" data-view="admin" data-admin-only hidden>
+          <i data-lucide="shield-check"></i>
+          <span>Admin</span>
+        </button>
               <button class="tab-button mobile-more-tab" id="mobile-more-button" type="button" aria-expanded="false" aria-controls="mobile-more-menu">
           <i data-lucide="ellipsis"></i>
           <span>Więcej</span>
@@ -207,6 +211,7 @@
         <button type="button" data-view="trends"><i data-lucide="chart-line"></i>Trendy</button>
         <button type="button" data-view="import"><i data-lucide="file-spreadsheet"></i>Import</button>
         <button type="button" data-view="settings"><i data-lucide="sliders-horizontal"></i>Ustawienia</button>
+        <button type="button" data-view="admin" data-admin-only hidden><i data-lucide="shield-check"></i>Admin</button>
       </div>
 
       <main id="main-content">
@@ -1274,6 +1279,73 @@
               </div>
               <p class="storage-note" id="storage-note"></p>
               <div class="sync-meta" id="sync-meta"></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-admin">
+          <section class="logging-hero admin-hero">
+            <div>
+              <span class="section-kicker">Admin</span>
+              <h2>Panel administracyjny</h2>
+              <p>Zarządzaj dostępem, statusem profili i bezpiecznym resetem postępów.</p>
+            </div>
+            <button class="secondary-button" id="admin-refresh" type="button">
+              <i data-lucide="refresh-cw"></i>
+              Odśwież
+            </button>
+          </section>
+
+          <section class="admin-grid">
+            <div class="panel admin-users-panel">
+              <div class="panel-heading">
+                <h2>Użytkownicy</h2>
+                <span class="stat-chip" id="admin-user-count">0</span>
+              </div>
+              <div class="admin-status-note" id="admin-status-note">Panel ładuje dane po potwierdzeniu uprawnień.</div>
+              <div class="admin-user-list" id="admin-user-list"></div>
+            </div>
+
+            <div class="panel admin-editor-panel">
+              <div class="panel-heading">
+                <h2>Dostęp profilu</h2>
+                <span class="stat-chip">Agnieszka</span>
+              </div>
+              <form id="admin-assignment-form" class="settings-form">
+                <label class="wide">
+                  <span>Email użytkownika</span>
+                  <input id="admin-user-email" type="email" placeholder="email@domena.pl">
+                </label>
+                <label>
+                  <span>Nazwa</span>
+                  <input id="admin-user-name" type="text" placeholder="Np. Agnieszka">
+                </label>
+                <label>
+                  <span>Status</span>
+                  <select id="admin-user-status">
+                    <option value="active">Aktywny</option>
+                    <option value="disabled">Wyłączony dostęp</option>
+                    <option value="banned">Zbanowany</option>
+                  </select>
+                </label>
+                <label class="wide">
+                  <span>Notatka admina</span>
+                  <textarea id="admin-user-notes" placeholder="Opcjonalna notatka widoczna tylko w panelu admina"></textarea>
+                </label>
+                <button class="primary-button wide" type="submit">
+                  <i data-lucide="save"></i>
+                  Zapisz dostęp
+                </button>
+              </form>
+              <p class="storage-note">Reset postępów robi backup profilu przed zmianą. Ban i wyłączenie dostępu blokują synchronizację przez RLS.</p>
+            </div>
+
+            <div class="panel admin-audit-panel">
+              <div class="panel-heading">
+                <h2>Audyt</h2>
+                <span class="stat-chip">Ostatnie akcje</span>
+              </div>
+              <div class="admin-audit-list" id="admin-audit-list"></div>
             </div>
           </section>
         </section>
