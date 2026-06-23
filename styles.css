@@ -1825,6 +1825,8 @@ textarea:focus {
   border-radius: var(--radius);
   background: #fff;
   padding: 11px;
+  display: grid;
+  gap: 9px;
 }
 
 .ai-summary strong,
@@ -1855,6 +1857,20 @@ textarea:focus {
 
 .ai-item small {
   color: var(--muted);
+}
+
+.ai-item-edit {
+  grid-template-columns: minmax(150px, 1.2fr) repeat(5, minmax(72px, 0.65fr));
+  align-items: end;
+}
+
+.ai-item-edit label {
+  gap: 4px;
+}
+
+.ai-item-edit input {
+  min-height: 36px;
+  padding-inline: 9px;
 }
 
 .stat-chip {
@@ -3575,6 +3591,14 @@ th {
   .smart-target-box {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .ai-item-edit {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ai-item-edit .wide {
+    grid-column: 1 / -1;
   }
 }
 .mobile-action-menu {

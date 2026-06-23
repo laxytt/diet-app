@@ -165,6 +165,7 @@
   let state = loadState(currentProfileId);
   let currentDate = todayISO();
   let manualMode = true;
+  let editingEntryId = null;
   let importState = null;
   let aiDraft = null;
   let scannedProduct = null;
@@ -260,6 +261,7 @@
     $('entry-form').addEventListener('submit', addDiaryEntry);
     $('ai-analyze-button').addEventListener('click', analyzeMealFromText);
     $('ai-result').addEventListener('click', handleAIResultAction);
+    $('ai-result').addEventListener('input', handleAIResultInput);
     $('gate-auth-form').addEventListener('submit', submitAuthForm);
     $('auth-login-tab').addEventListener('click', () => setAuthMode('login'));
     $('auth-register-tab').addEventListener('click', () => setAuthMode('register'));
@@ -303,9 +305,15 @@
 
     $('meal-groups').addEventListener('click', (event) => {
       const deleteButton = event.target.closest('[data-delete-entry]');
+      const editButton = event.target.closest('[data-edit-entry]');
       const repeatButton = event.target.closest('[data-repeat-entry]');
       const templateButton = event.target.closest('[data-template-from-entry]');
       const saveTemplateButton = event.target.closest('[data-save-template]');
+
+      if (editButton) {
+        startEditDiaryEntry(editButton.dataset.editEntry);
+        return;
+      }
 
       if (repeatButton) {
         const entry = state.entries.find((item) => item.id === repeatButton.dataset.repeatEntry);
@@ -434,6 +442,7 @@
     updateAdminVisibility();
     renderAdminDashboard();
     updateSyncUI();
+    updateEntrySubmitMode();
     updateEntryPreview();
     renderCharts();
     refreshIcons();
@@ -2138,6 +2147,9 @@
         <span class="macro-number hide-sm">${round1(entry.carbs)}w</span>
         <span class="macro-number hide-sm">${round1(entry.fat)}t</span>
         <div class="row-actions">
+          <button class="icon-button" type="button" data-edit-entry="${entry.id}" aria-label="Edytuj ${escapeHTML(entry.foodName)}" title="Edytuj">
+            <i data-lucide="pencil"></i>
+          </button>
           <button class="icon-button" type="button" data-repeat-entry="${entry.id}" aria-label="Dodaj ponownie ${escapeHTML(entry.foodName)}" title="Dodaj ponownie">
             <i data-lucide="repeat-2"></i>
           </button>
@@ -2197,22 +2209,6 @@
       return;
     }
 
-    const entry = {
-      id: uid(),
-      date: currentDate,
-      meal: $('entry-meal').value,
-      foodId: matchedFood ? matchedFood.id : null,
-      foodName: matchedFood ? matchedFood.name : foodName,
-      amount,
-      unit,
-      grams: equivalentGrams(matchedFood, amount, unit),
-      calories: nutrition.calories,
-      protein: nutrition.protein,
-      carbs: nutrition.carbs,
-      fat: nutrition.fat,
-      createdAt: new Date().toISOString()
-    };
-
     if (!matchedFood && hasNutrition) {
       const createdFood = addImportedFoodIfMissing({
         name: foodName,
@@ -2224,20 +2220,96 @@
         fat: nutrition.fat,
         fiber: 0
       });
-      entry.foodId = createdFood ? createdFood.id : null;
+      if (createdFood) {
+        saveDiaryEntryFromForm(createdFood, foodName, amount, unit, nutrition);
+        return;
+      }
     }
 
+    saveDiaryEntryFromForm(matchedFood, foodName, amount, unit, nutrition);
+  }
+
+  function saveDiaryEntryFromForm(matchedFood, foodName, amount, unit, nutrition) {
+    const now = new Date().toISOString();
+    const entryIndex = editingEntryId ? state.entries.findIndex((item) => item.id === editingEntryId) : -1;
+    const existingEntry = entryIndex >= 0 ? state.entries[entryIndex] : null;
+    const entry = {
+      ...(existingEntry || {}),
+      id: existingEntry ? existingEntry.id : uid(),
+      date: existingEntry ? existingEntry.date : currentDate,
+      meal: $('entry-meal').value,
+      foodId: matchedFood ? matchedFood.id : null,
+      foodName: matchedFood ? matchedFood.name : foodName,
+      amount,
+      unit,
+      grams: equivalentGrams(matchedFood, amount, unit),
+      calories: nutrition.calories,
+      protein: nutrition.protein,
+      carbs: nutrition.carbs,
+      fat: nutrition.fat,
+      macroIncomplete: !matchedFood && nutrition.calories > 0 && nutrition.protein === 0 && nutrition.carbs === 0 && nutrition.fat === 0,
+      createdAt: existingEntry ? existingEntry.createdAt : now,
+      updatedAt: existingEntry ? now : undefined
+    };
+
+    if (existingEntry) {
+      pushUndo({
+        type: 'restore-entries',
+        entries: [structuredCloneSafe(existingEntry)],
+        createdAt: now
+      });
+      state.entries[entryIndex] = entry;
+    } else {
     state.entries.push(entry);
+    }
 
     saveState();
+    clearEntryForm();
+    render();
+    toast(existingEntry ? 'Wpis zaktualizowany.' : 'Produkt dodany do dziennika.');
+  }
+
+  function startEditDiaryEntry(entryId) {
+    const entry = state.entries.find((item) => item.id === entryId);
+    if (!entry) return;
+    editingEntryId = entry.id;
+    manualMode = true;
+    updateManualControls();
+    $('entry-meal').value = entry.meal || 'Snack';
+    $('entry-food').value = entry.foodName || '';
+    $('entry-grams').value = entry.amount !== undefined && entry.amount !== null ? entry.amount : numberValue(entry.grams, 100);
+    $('entry-unit').value = UNIT_OPTIONS.some((item) => item.value === entry.unit) ? entry.unit : 'g';
+    $('entry-calories').value = numberValue(entry.calories, 0);
+    $('entry-protein').value = numberValue(entry.protein, 0);
+    $('entry-carbs').value = numberValue(entry.carbs, 0);
+    $('entry-fat').value = numberValue(entry.fat, 0);
+    updateEntrySubmitMode();
+    updateEntryPreview();
+    $('entry-food').focus();
+    const advancedTools = document.querySelector('.advanced-entry-tools');
+    if (advancedTools) advancedTools.open = true;
+    toast('Edytujesz wpis z dziennika.');
+  }
+
+  function clearEntryForm() {
+    editingEntryId = null;
     $('entry-food').value = '';
     $('entry-grams').value = '100';
     $('entry-unit').value = 'g';
     ['entry-calories', 'entry-protein', 'entry-carbs', 'entry-fat'].forEach((id) => {
       $(id).value = '';
     });
-    render();
-    toast('Produkt dodany do dziennika.');
+    updateEntrySubmitMode();
+    updateEntryPreview();
+  }
+
+  function updateEntrySubmitMode() {
+    const button = $('entry-submit-button');
+    if (!button) return;
+    const icon = editingEntryId ? 'save' : 'plus';
+    const label = editingEntryId ? 'Zapisz zmiany' : 'Dodaj do dziennika';
+    button.innerHTML = `<i data-lucide="${icon}"></i><span id="entry-submit-label">${label}</span>`;
+    refreshIcons();
   }
 
   async function analyzeMealFromText() {
@@ -2364,6 +2436,105 @@
     refreshIcons();
   }
 
+  function renderAIResult() {
+    const target = $('ai-result');
+    if (!target) return;
+    if (!aiDraft) {
+      target.innerHTML = '';
+      return;
+    }
+
+    const confidence = Math.round(numberValue(aiDraft.confidence, 0) * 100);
+    target.innerHTML = `
+      <div class="ai-summary">
+        <label>
+          <span>Nazwa wyniku AI</span>
+          <input data-ai-meal-name value="${escapeHTML(aiDraft.mealName)}">
+        </label>
+        <strong id="ai-result-total">${escapeHTML(aiDraft.mealName)} · ${Math.round(aiDraft.totals.calories)} kcal</strong>
+        <span id="ai-result-macros">${round1(aiDraft.totals.protein)}g bialka / ${round1(aiDraft.totals.carbs)}g weglowodanow / ${round1(aiDraft.totals.fat)}g tluszczu · pewnosc ${confidence}%</span>
+        <label>
+          <span>Notatka AI</span>
+          <textarea data-ai-notes rows="2">${escapeHTML(aiDraft.notes || '')}</textarea>
+        </label>
+      </div>
+      <div class="ai-items">
+        ${aiDraft.items.map((item, index) => `
+          <div class="ai-item ai-item-edit" data-ai-item="${index}">
+            <label class="wide">
+              <span>Skladnik</span>
+              <input data-ai-field="name" value="${escapeHTML(item.name)}">
+            </label>
+            <label>
+              <span>Gramy</span>
+              <input data-ai-field="grams" type="number" min="0" step="1" value="${round1(item.grams)}">
+            </label>
+            <label>
+              <span>Kcal</span>
+              <input data-ai-field="calories" type="number" min="0" step="1" value="${Math.round(item.calories)}">
+            </label>
+            <label>
+              <span>Bialko</span>
+              <input data-ai-field="protein" type="number" min="0" step="0.1" value="${round1(item.protein)}">
+            </label>
+            <label>
+              <span>Wegle</span>
+              <input data-ai-field="carbs" type="number" min="0" step="0.1" value="${round1(item.carbs)}">
+            </label>
+            <label>
+              <span>Tluszcz</span>
+              <input data-ai-field="fat" type="number" min="0" step="0.1" value="${round1(item.fat)}">
+            </label>
+          </div>
+        `).join('')}
+      </div>
+      <div class="button-row">
+        <button class="primary-button" type="button" data-save-ai>
+          <i data-lucide="check"></i>
+          Zapisz do dziennika
+        </button>
+        <button class="ghost-button" type="button" data-clear-ai>Odrzuc</button>
+      </div>
+    `;
+    refreshIcons();
+  }
+
+  function handleAIResultInput(event) {
+    if (!aiDraft || !event.target.closest('#ai-result')) return;
+    syncAIResultFromInputs();
+    updateAIResultSummary();
+  }
+
+  function syncAIResultFromInputs() {
+    if (!aiDraft) return;
+    const root = $('ai-result');
+    const mealName = root.querySelector('[data-ai-meal-name]');
+    const notes = root.querySelector('[data-ai-notes]');
+    aiDraft.mealName = (mealName && mealName.value.trim()) || 'Opisany posilek';
+    aiDraft.notes = notes ? notes.value.trim() : '';
+    aiDraft.items = [...root.querySelectorAll('[data-ai-item]')].map((row) => {
+      const field = (name) => row.querySelector(`[data-ai-field="${name}"]`);
+      return {
+        name: (field('name') && field('name').value.trim()) || 'Skladnik',
+        grams: Math.max(0, numberValue(field('grams') && field('grams').value, 0)),
+        calories: Math.max(0, numberValue(field('calories') && field('calories').value, 0)),
+        protein: Math.max(0, numberValue(field('protein') && field('protein').value, 0)),
+        carbs: Math.max(0, numberValue(field('carbs') && field('carbs').value, 0)),
+        fat: Math.max(0, numberValue(field('fat') && field('fat').value, 0))
+      };
+    });
+    aiDraft.totals = sumEntries(aiDraft.items);
+  }
+
+  function updateAIResultSummary() {
+    if (!aiDraft) return;
+    const total = $('ai-result-total');
+    const macros = $('ai-result-macros');
+    const confidence = Math.round(numberValue(aiDraft.confidence, 0) * 100);
+    if (total) total.textContent = `${aiDraft.mealName} · ${Math.round(aiDraft.totals.calories)} kcal`;
+    if (macros) macros.textContent = `${round1(aiDraft.totals.protein)}g bialka / ${round1(aiDraft.totals.carbs)}g weglowodanow / ${round1(aiDraft.totals.fat)}g tluszczu · pewnosc ${confidence}%`;
+  }
+
   function handleAIResultAction(event) {
     if (event.target.closest('[data-clear-ai]')) {
       aiDraft = null;
@@ -2372,6 +2543,7 @@
     }
 
     if (!event.target.closest('[data-save-ai]') || !aiDraft) return;
+    syncAIResultFromInputs();
     const meal = $('entry-meal').value || 'Snack';
     aiDraft.items.forEach((item) => {
       const existingFood = findFoodByName(item.name);
@@ -2782,6 +2954,7 @@
       values: entryFormSnapshot(),
       createdAt: new Date().toISOString()
     });
+    editingEntryId = null;
     $('entry-food').value = '';
     $('entry-grams').value = '100';
     $('entry-unit').value = 'g';
@@ -2793,6 +2966,7 @@
     $('quick-entry-calories').value = '';
     $('ai-meal-text').value = '';
     aiDraft = null;
+    updateEntrySubmitMode();
     updateEntryPreview();
     renderAIResult();
     toast('Formularz wyczyszczony.');
