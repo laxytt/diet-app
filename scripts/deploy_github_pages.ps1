@@ -22,7 +22,7 @@ if (!(Test-Path ".git")) {
   git branch -M main
 }
 
-git add index.html styles.css app.js config.js manifest.webmanifest sw.js icon.svg README.md supabase scripts .gitignore
+git add .
 git diff --cached --quiet
 if ($LASTEXITCODE -ne 0) {
   git commit -m "Prepare diet app deployment"
@@ -37,8 +37,12 @@ if ($remotes -notcontains "origin") {
 }
 
 $repoFullName = (& $gh repo view --json nameWithOwner --jq ".nameWithOwner").Trim()
-$body = @{ source = @{ branch = "main"; path = "/" } } | ConvertTo-Json -Depth 4
-$body | & $gh api --method POST "repos/$repoFullName/pages" --input -
+try {
+  $body = @{ build_type = "workflow" } | ConvertTo-Json -Depth 4
+  $body | & $gh api --method PUT "repos/$repoFullName/pages" --input -
+} catch {
+  Write-Warning "Could not switch Pages to GitHub Actions automatically. In GitHub Settings -> Pages choose Source: GitHub Actions."
+}
 
 Write-Host "github-pages-requested"
-Write-Host "URL will appear in GitHub repo Settings -> Pages."
+Write-Host "GitHub Actions will build dist/ and publish it to Pages."

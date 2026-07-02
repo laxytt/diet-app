@@ -34,6 +34,8 @@ if (Test-Path ".\.tools\deno\deno.exe") {
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   .\.tools\deno\deno.exe check supabase\functions\admin-api\index.ts
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  .\.tools\deno\deno.exe check supabase\functions\billing-api\index.ts
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   .\.tools\deno\deno.exe check supabase\functions\recommend-recipes\index.ts
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } else {

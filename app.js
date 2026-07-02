@@ -40,6 +40,126 @@
     { key: 'fat', label: 'Tłuszcz', aliases: ['fat', 'tluszcz', 'fats'] },
     { key: 'weight', label: 'Waga', aliases: ['weight', 'waga', 'masa ciala'] }
   ];
+  const BILLING_ENTITLEMENTS = ['premium_access', 'standard_recipes_pack', 'personalized_recipes_pack'];
+  const BILLING_PRODUCTS = {
+    monthly: 'dd_premium_monthly',
+    yearly: 'dd_premium_yearly',
+    standardPack: 'dd_recipe_pack_standard_001',
+    personalizedPack: 'dd_recipe_pack_personalized_001'
+  };
+  const LANGUAGES = ['auto', 'pl', 'en'];
+  const LANGUAGE_NAMES = {
+    auto: 'Automatycznie',
+    pl: 'Polski',
+    en: 'English'
+  };
+  const UI_TRANSLATIONS = {
+    en: {
+      'Panel żywienia': 'Nutrition panel',
+      'Zaloguj się': 'Log in',
+      'Wróć do swojego profilu i zapisanych danych.': 'Return to your profile and saved data.',
+      'Język': 'Language',
+      'Automatycznie': 'Automatic',
+      'Polski': 'Polish',
+      'Logowanie': 'Login',
+      'Rejestracja': 'Sign up',
+      'Dane profilu są prywatne i pojawią się dopiero po zalogowaniu.': 'Profile data is private and appears only after login.',
+      'Nazwa użytkownika': 'Username',
+      'Hasło': 'Password',
+      'Wiek (opcjonalnie)': 'Age (optional)',
+      'Wzrost (opcjonalnie)': 'Height (optional)',
+      'Waga (opcjonalnie)': 'Weight (optional)',
+      'Cel': 'Goal',
+      'Zaloguj': 'Log in',
+      'Zaloguj przez Google': 'Continue with Google',
+      'Zaloguj przez Apple': 'Continue with Apple',
+      'Nie pamiętasz hasła?': 'Forgot password?',
+      'Panel': 'Home',
+      'Dziennik': 'Diary',
+      'Plan': 'Plan',
+      'Produkty': 'Foods',
+      'Przepisy': 'Recipes',
+      'Trendy': 'Progress',
+      'Import': 'Import',
+      'Ustawienia': 'Settings',
+      'Dzisiaj': 'Today',
+      'Spokojny plan, konkretne liczby i szybkie decyzje.': 'A calm plan, clear numbers, quick choices.',
+      'Dodaj posiłek': 'Add meal',
+      'Skróty': 'Shortcuts',
+      'Rzadziej używane funkcje bez przeładowywania dolnego paska.': 'Less frequent tools without crowding the bottom bar.',
+      'Postęp tygodnia': 'Weekly progress',
+      'Zdobywaj punkty za regularne, zdrowe działania.': 'Earn points for consistent healthy actions.',
+      'Kalorie dzisiaj': 'Calories today',
+      'Białko': 'Protein',
+      'Węglowodany': 'Carbs',
+      'Tłuszcz': 'Fat',
+      'Woda': 'Water',
+      'Dzisiejsze posiłki': "Today's meals",
+      'Notowanie jedzenia': 'Food diary',
+      'Dodawaj posiłki, poprawiaj makro i zapisuj pomiary bez mieszania tego z dashboardem.': 'Log meals, adjust macros and save measurements without mixing it with the dashboard.',
+      'Dodaj wpis': 'Add entry',
+      'Szybki wpis': 'Quick entry',
+      'Nazwa posiłku': 'Meal name',
+      'Dodaj szybko': 'Quick add',
+      'Pełny formularz i AI': 'Full form and AI',
+      'Opisz posiłek': 'Describe meal',
+      'Jak opisać posiłek, żeby wynik był lepszy?': 'How to describe a meal for better results?',
+      'Przelicz z opisu': 'Estimate from text',
+      'Rozpoznaj ze zdjęcia': 'Recognize from photo',
+      'Dziennik dnia': 'Daily diary',
+      'Pomiary i aktywność': 'Measurements and activity',
+      'Premium': 'Premium',
+      'Kod testera': 'Tester code',
+      'Aktywuj kod': 'Activate code',
+      'Diagnostyka reklam': 'Ads diagnostics',
+      'Odśwież status reklam': 'Refresh ads status',
+      'Odblokuj inteligentnego asystenta diety': 'Unlock the smart nutrition assistant',
+      'Większe limity AI, przepisy dopasowane do celu i brak reklam.': 'Higher AI limits, recipes matched to your goal, and no ads.',
+      'Premium miesięcznie': 'Premium monthly',
+      'Premium rocznie': 'Premium yearly',
+      'Pakiet 50 przepisów': '50 recipe pack',
+      '30 przepisów personalnych': '30 personalized recipes',
+      'Przywróć zakupy': 'Restore purchases',
+      'Kalendarz': 'Calendar'
+    }
+  };
+  const XP_RULES = {
+    log_meal: 12,
+    ai_meal_saved: 8,
+    water_logged: 8,
+    weight_logged: 8,
+    activity_logged: 10,
+    plan_created: 8,
+    recipe_saved: 10,
+    ai_feedback: 12
+  };
+  const BADGE_DEFINITIONS = [
+    { id: 'first_meal', icon: 'utensils', label: 'Pierwszy wpis', en: 'First meal', condition: (ctx) => ctx.entries >= 1 },
+    { id: 'three_day_streak', icon: 'flame', label: '3 dni rytmu', en: '3-day rhythm', condition: (ctx) => ctx.streak >= 3 },
+    { id: 'seven_day_streak', icon: 'badge-check', label: '7 dni serii', en: '7-day streak', condition: (ctx) => ctx.streak >= 7 },
+    { id: 'hydration', icon: 'droplets', label: 'Nawodnienie', en: 'Hydration', condition: (ctx) => ctx.waterDays >= 3 },
+    { id: 'planner', icon: 'calendar-check', label: 'Planowanie', en: 'Planner', condition: (ctx) => ctx.plannedMeals >= 3 },
+    { id: 'ai_helper', icon: 'sparkles', label: 'Pomocnik AI', en: 'AI helper', condition: (ctx) => ctx.aiFeedback >= 1 }
+  ];
+  const DEFAULT_BILLING_STATE = {
+    plan: 'free',
+    isPremium: false,
+    entitlements: {
+      premium_access: false,
+      standard_recipes_pack: false,
+      personalized_recipes_pack: false
+    },
+    usage: {
+      ai_meal_analysis: { used: 0, limit: 10, remaining: 10 },
+      ai_recipe_generation: { used: 0, limit: 2, remaining: 2 }
+    },
+    period: '',
+    showAds: false,
+    products: {
+      subscriptions: [BILLING_PRODUCTS.monthly, BILLING_PRODUCTS.yearly],
+      oneTime: [BILLING_PRODUCTS.standardPack, BILLING_PRODUCTS.personalizedPack]
+    }
+  };
 
   const seedFoods = [
     foodSeed('Pierś z kurczaka, gotowana', 100, 165, 31, 0, 3.6, 0),
@@ -116,7 +236,8 @@
       activityLevel: 'light',
       bodyGoal: '',
       autoTargets: true,
-      theme: 'light'
+      theme: 'light',
+      language: 'auto'
     },
     foods: seedFoods,
     recipes: seedRecipes,
@@ -134,6 +255,14 @@
     plannedMeals: [],
     shoppingLists: [],
     weeklyReviews: {},
+    gamification: {
+      xp: 0,
+      level: 1,
+      badges: [],
+      weeklyQuests: {},
+      claimedRewards: [],
+      history: []
+    },
     habitGoals: {
       loggingDays: 5,
       waterDays: 5,
@@ -197,21 +326,44 @@
     users: [],
     logs: []
   };
+  let billingState = billingDefaults();
+  let nativeBillingReady = false;
+  let nativeAdsReady = false;
+  let billingRefreshPromise = null;
+  let nativeAdsStatus = {
+    configured: false,
+    visible: false,
+    lastAction: 'boot',
+    lastResult: '',
+    lastError: '',
+    updatedAt: ''
+  };
+  let calendarMonthDate = currentDate;
+  let dateStripDrag = null;
 
   const $ = (id) => document.getElementById(id);
 
   applyTheme();
-  init();
+  init().catch((error) => {
+    console.error('Nie udało się uruchomić aplikacji.', error);
+    isAuthInitializing = false;
+    updateSyncUI();
+    finishBoot();
+  });
 
   async function init() {
+    document.documentElement.classList.toggle('native-app', isNativeApp());
+    await cleanupNativeServiceWorkerCache();
     bindEvents();
     initSupabaseClient();
     setAuthMode('login');
     updateManualControls();
     setupMobileAccordions();
     $('selected-date').value = currentDate;
-    $('xlsx-status').textContent = window.XLSX ? 'Parser Excela gotowy' : 'CSV gotowe';
+    $('xlsx-status').textContent = window.DietExcel ? 'Parser Excela gotowy' : 'CSV gotowe';
     updateSyncUI();
+    render();
+    finishBoot();
     await refreshSupabaseSession();
     if (canSync()) await loadAssignedProfile();
     await refreshAdminAccess();
@@ -220,10 +372,55 @@
     render();
     scheduleLocalReminders();
     registerServiceWorker();
+    refreshBillingAfterBoot();
+  }
+
+  async function refreshBillingAfterBoot() {
+    try {
+      await initializeBillingForSession();
+      await refreshBillingState({ quiet: true });
+      renderBillingUI();
+      renderRecipes();
+      renderAIRecipes();
+    } catch (error) {
+      console.warn('Nie udało się odświeżyć billing po starcie.', error);
+    }
+  }
+
+  function finishBoot() {
+    document.querySelector('.app-shell')?.classList.remove('app-booting');
+  }
+
+  function isNativeApp() {
+    return Boolean(window.DietNative && window.DietNative.isNative);
+  }
+
+  function isNativeIOS() {
+    return isNativeApp() && window.DietNative.platform === 'ios';
+  }
+
+  async function cleanupNativeServiceWorkerCache() {
+    if (!isNativeApp()) return;
+    const jobs = [];
+    if ('serviceWorker' in navigator) {
+      jobs.push(
+        navigator.serviceWorker.getRegistrations()
+          .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+          .catch(() => {})
+      );
+    }
+    if ('caches' in window) {
+      jobs.push(
+        window.caches.keys()
+          .then((keys) => Promise.all(keys.map((key) => window.caches.delete(key))))
+          .catch(() => {})
+      );
+    }
+    await Promise.all(jobs);
   }
 
   function bindEvents() {
-    document.querySelectorAll('.tab-button[data-view], .mobile-more-menu [data-view]').forEach((button) => {
+    document.querySelectorAll('.tab-button[data-view], .mobile-more-menu [data-view], .dashboard-shortcuts [data-view]').forEach((button) => {
       button.addEventListener('click', () => {
         switchView(button.dataset.view);
         closeMobileMoreMenu();
@@ -251,6 +448,30 @@
       currentDate = event.target.value || todayISO();
       render();
     });
+    $('selected-date-display').addEventListener('click', () => openDatePicker($('selected-date')));
+    $('diary-date-strip').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-strip-date]');
+      if (!button) return;
+      currentDate = button.dataset.stripDate || todayISO();
+      render();
+    });
+    bindDateStripGestures();
+    if ($('date-strip-prev')) $('date-strip-prev').addEventListener('click', () => shiftDate(-1));
+    if ($('date-strip-next')) $('date-strip-next').addEventListener('click', () => shiftDate(1));
+    if ($('date-strip-calendar')) $('date-strip-calendar').addEventListener('click', openCalendarModal);
+    if ($('calendar-close')) $('calendar-close').addEventListener('click', closeCalendarModal);
+    if ($('calendar-modal')) {
+      $('calendar-modal').addEventListener('click', (event) => {
+        if (event.target === $('calendar-modal')) closeCalendarModal();
+        const day = event.target.closest('[data-calendar-date]');
+        if (!day) return;
+        currentDate = day.dataset.calendarDate;
+        closeCalendarModal();
+        render();
+      });
+    }
+    if ($('calendar-prev-month')) $('calendar-prev-month').addEventListener('click', () => shiftCalendarMonth(-1));
+    if ($('calendar-next-month')) $('calendar-next-month').addEventListener('click', () => shiftCalendarMonth(1));
 
     $('toggle-manual').addEventListener('click', () => {
       manualMode = !manualMode;
@@ -260,12 +481,16 @@
 
     $('entry-form').addEventListener('submit', addDiaryEntry);
     $('ai-analyze-button').addEventListener('click', analyzeMealFromText);
+    $('ai-photo-button').addEventListener('click', analyzeMealFromPhoto);
+    $('ai-meal-photo').addEventListener('change', analyzeMealPhotoFile);
     $('ai-result').addEventListener('click', handleAIResultAction);
     $('ai-result').addEventListener('input', handleAIResultInput);
     $('gate-auth-form').addEventListener('submit', submitAuthForm);
     $('auth-login-tab').addEventListener('click', () => setAuthMode('login'));
     $('auth-register-tab').addEventListener('click', () => setAuthMode('register'));
+    if ($('auth-language')) $('auth-language').addEventListener('change', (event) => updateLanguageSetting(event.target.value));
     $('gate-google-button').addEventListener('click', loginWithGoogle);
+    if ($('gate-apple-button')) $('gate-apple-button').addEventListener('click', loginWithApple);
     $('gate-forgot-button').addEventListener('click', () => setAuthMode('reset'));
     $('gate-auth-back-button').addEventListener('click', () => {
       passwordRecoveryMode = false;
@@ -309,6 +534,13 @@
       const repeatButton = event.target.closest('[data-repeat-entry]');
       const templateButton = event.target.closest('[data-template-from-entry]');
       const saveTemplateButton = event.target.closest('[data-save-template]');
+      const addMealButton = event.target.closest('[data-add-meal]');
+
+      if (addMealButton) {
+        $('entry-meal').value = addMealButton.dataset.addMeal || 'Snack';
+        focusMealForm();
+        return;
+      }
 
       if (editButton) {
         startEditDiaryEntry(editButton.dataset.editEntry);
@@ -358,6 +590,7 @@
 
     $('food-search').addEventListener('input', renderFoods);
     $('barcode-lookup').addEventListener('click', lookupBarcodeFromInput);
+    if ($('native-barcode-scan')) $('native-barcode-scan').addEventListener('click', scanBarcodeNativeCamera);
     $('barcode-file').addEventListener('change', scanBarcodeFile);
     $('barcode-result').addEventListener('click', handleBarcodeResultAction);
     $('food-form').addEventListener('submit', saveFood);
@@ -388,12 +621,31 @@
     $('logout-button').addEventListener('click', logoutUser);
     $('admin-refresh').addEventListener('click', loadAdminDashboard);
     $('admin-assignment-form').addEventListener('submit', saveAdminAssignment);
+    if ($('admin-billing-form')) $('admin-billing-form').addEventListener('submit', grantAdminEntitlement);
+    if ($('admin-billing-revoke')) $('admin-billing-revoke').addEventListener('click', revokeAdminEntitlement);
     $('admin-user-list').addEventListener('click', handleAdminUserAction);
     $('avatar-input').addEventListener('change', handleAvatarUpload);
+    if ($('avatar-native-button')) $('avatar-native-button').addEventListener('click', pickAvatarNative);
     $('remove-avatar').addEventListener('click', removeAvatar);
     $('export-json').addEventListener('click', exportJSON);
     $('export-csv').addEventListener('click', exportCSV);
     $('reset-app').addEventListener('click', resetApp);
+    if ($('delete-account')) $('delete-account').addEventListener('click', deleteAccount);
+    if ($('open-paywall-button')) $('open-paywall-button').addEventListener('click', () => showPaywall('Premium odblokowuje AI, przepisy i brak reklam.'));
+    if ($('restore-purchases-button')) $('restore-purchases-button').addEventListener('click', restorePurchases);
+    if ($('manage-subscription-button')) $('manage-subscription-button').addEventListener('click', manageSubscription);
+    if ($('promo-code-form')) $('promo-code-form').addEventListener('submit', redeemPromoCodeFromSettings);
+    if ($('paywall-promo-form')) $('paywall-promo-form').addEventListener('submit', redeemPromoCodeFromPaywall);
+    if ($('refresh-ad-diagnostics')) $('refresh-ad-diagnostics').addEventListener('click', refreshAdDiagnostics);
+    if ($('paywall-close')) $('paywall-close').addEventListener('click', hidePaywall);
+    if ($('paywall-restore')) $('paywall-restore').addEventListener('click', restorePurchases);
+    if ($('paywall-modal')) {
+      $('paywall-modal').addEventListener('click', (event) => {
+        if (event.target === $('paywall-modal')) hidePaywall();
+        const button = event.target.closest('[data-buy-product]');
+        if (button) buyProduct(button.dataset.buyProduct);
+      });
+    }
 
     $('import-file').addEventListener('change', handleImportFile);
     $('import-button').addEventListener('click', commitImport);
@@ -407,11 +659,16 @@
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) refreshSessionAfterFocus();
     });
+    window.addEventListener('diet-native-url', (event) => {
+      handleAuthCallbackUrl(event.detail && event.detail.url);
+    });
   }
 
   function render() {
     applyTheme();
-    $('selected-date').value = currentDate;
+    applyLanguage();
+    updateSelectedDateControl();
+    renderDateStrip();
     renderProfileBadge();
     renderSummary();
     renderProfileVisuals();
@@ -435,10 +692,14 @@
     renderSettings();
     renderStorageNote();
     renderSyncMeta();
+    renderBillingUI();
+    renderGamification();
+    renderAdDiagnostics();
     renderAIResult();
     renderTrendSummary();
     renderWeeklyReview();
     renderForecastPanel();
+    applyLanguage();
     updateAdminVisibility();
     renderAdminDashboard();
     updateSyncUI();
@@ -456,6 +717,10 @@
   }
 
   function switchView(view) {
+    if (view === 'admin' && isNativeApp()) {
+      toast('Panel admina jest dostępny tylko w wersji web.');
+      return;
+    }
     if (view === 'admin' && !isAdmin) {
       toast('Brak uprawnień administratora.');
       return;
@@ -539,6 +804,78 @@
     toast(state.settings.theme === 'dark' ? 'Tryb ciemny włączony.' : 'Tryb jasny włączony.');
   }
 
+  function currentLanguageSetting() {
+    const language = state && state.settings && LANGUAGES.includes(state.settings.language)
+      ? state.settings.language
+      : 'auto';
+    return language;
+  }
+
+  function currentLanguage() {
+    const setting = currentLanguageSetting();
+    if (setting !== 'auto') return setting;
+    return String(navigator.language || '').toLowerCase().startsWith('en') ? 'en' : 'pl';
+  }
+
+  function updateLanguageSetting(value) {
+    const language = LANGUAGES.includes(value) ? value : 'auto';
+    if (!state.settings) state.settings = { ...defaultState.settings };
+    state.settings.language = language;
+    localStorage.setItem(storageKey(currentProfileId), JSON.stringify(normalizeState(state)));
+    applyLanguage();
+    renderSettings();
+    refreshIcons();
+  }
+
+  function applyLanguage() {
+    const language = currentLanguage();
+    document.documentElement.lang = language === 'en' ? 'en' : 'pl';
+    const authSelect = $('auth-language');
+    const settingsSelect = $('profile-language');
+    if (authSelect) authSelect.value = currentLanguageSetting();
+    if (settingsSelect) settingsSelect.value = currentLanguageSetting();
+    translateStaticSurface(language);
+  }
+
+  function translateStaticSurface(language) {
+    const dictionary = UI_TRANSLATIONS[language];
+    if (!dictionary) {
+      document.querySelectorAll('[data-i18n-source]').forEach((node) => {
+        node.textContent = node.dataset.i18nSource;
+      });
+      document.querySelectorAll('[data-i18n-placeholder]').forEach((node) => {
+        node.setAttribute('placeholder', node.dataset.i18nPlaceholder);
+      });
+      return;
+    }
+
+    const roots = [
+      document.querySelector('.topbar'),
+      $('auth-gate'),
+      $('view-dashboard'),
+      $('view-diary'),
+      $('view-settings'),
+      $('paywall-modal'),
+      $('calendar-modal')
+    ].filter(Boolean);
+
+    roots.forEach((root) => {
+      root.querySelectorAll('h1,h2,h3,p,span,strong,small,button,summary,label > span,li,option').forEach((node) => {
+        if (node.children.length) return;
+        const source = node.dataset.i18nSource || node.textContent.trim();
+        if (!source) return;
+        if (!node.dataset.i18nSource) node.dataset.i18nSource = source;
+        if (dictionary[source]) node.textContent = dictionary[source];
+      });
+      root.querySelectorAll('input[placeholder], textarea[placeholder]').forEach((node) => {
+        const source = node.dataset.i18nPlaceholder || node.getAttribute('placeholder');
+        if (!source) return;
+        if (!node.dataset.i18nPlaceholder) node.dataset.i18nPlaceholder = source;
+        if (dictionary[source]) node.setAttribute('placeholder', dictionary[source]);
+      });
+    });
+  }
+
   async function switchProfile(profileId) {
     const profile = profileById(profileId);
     if (!profile || profile.id === currentProfileId) return;
@@ -609,7 +946,7 @@
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: !isNativeApp(),
         storageKey: 'diet-studio:supabase-auth'
       }
     });
@@ -632,12 +969,20 @@
         renderProfileBadge();
       }
       await refreshAdminAccess();
+      await initializeBillingForSession();
+      await refreshBillingState({ quiet: true });
+      renderBillingUI();
     });
   }
 
   async function refreshSupabaseSession() {
     if (!supabaseClient) return;
     await restoreSessionFromUrl();
+    if (window.DIET_NATIVE_INITIAL_URL) {
+      const nativeUrl = window.DIET_NATIVE_INITIAL_URL;
+      window.DIET_NATIVE_INITIAL_URL = '';
+      await restoreSessionFromUrl(nativeUrl);
+    }
     const { data, error } = await supabaseClient.auth.getSession();
     if (error) {
       toast('Nie udało się odczytać sesji Supabase.');
@@ -647,13 +992,43 @@
     updateSyncUI();
   }
 
-  async function restoreSessionFromUrl() {
-    if (!window.location.hash || !window.location.hash.includes('access_token=')) return;
-    const params = new URLSearchParams(window.location.hash.slice(1));
+  async function handleAuthCallbackUrl(url) {
+    if (!url || !supabaseClient) return;
+    const restored = await restoreSessionFromUrl(url);
+    if (!restored) return;
+    if (canSync()) await loadAssignedProfile();
+    await refreshAdminAccess();
+    await initializeBillingForSession();
+    await refreshBillingState({ quiet: true });
+    updateSyncUI();
+    render();
+  }
+
+  async function restoreSessionFromUrl(sourceUrl = window.location.href) {
+    let url;
+    try {
+      url = new URL(sourceUrl);
+    } catch (_error) {
+      return false;
+    }
+    const hashParams = new URLSearchParams((url.hash || '').replace(/^#/, ''));
+    const searchParams = new URLSearchParams(url.search || '');
+    const params = hashParams.toString() ? hashParams : searchParams;
+    const code = searchParams.get('code') || hashParams.get('code');
     const accessToken = params.get('access_token');
     const refreshToken = params.get('refresh_token');
     const type = params.get('type');
-    if (!accessToken || !refreshToken) return;
+    if (code && !accessToken) {
+      const { data, error } = await supabaseClient.auth.exchangeCodeForSession(code);
+      if (error) {
+        toast(`Nie udało się przywrócić sesji: ${error.message}`);
+        return false;
+      }
+      syncSession = data.session;
+      cleanAuthUrl(sourceUrl);
+      return true;
+    }
+    if (!accessToken || !refreshToken) return false;
 
     const { data, error } = await supabaseClient.auth.setSession({
       access_token: accessToken,
@@ -668,6 +1043,12 @@
       passwordRecoveryMode = true;
       setAuthMode('update-password');
     }
+    cleanAuthUrl(sourceUrl);
+    return true;
+  }
+
+  function cleanAuthUrl(sourceUrl) {
+    if (isNativeApp() && sourceUrl !== window.location.href) return;
     window.history.replaceState(null, document.title, authRedirectUrl());
   }
 
@@ -678,6 +1059,8 @@
       if (!error) syncSession = data.session;
       if (canSync() && !currentProfileAssignment) await loadAssignedProfile();
       await refreshAdminAccess();
+      await initializeBillingForSession();
+      await refreshBillingState({ quiet: true });
       updateSyncUI();
       renderProfileBadge();
     })().finally(() => {
@@ -753,9 +1136,9 @@
 
   function updateAdminVisibility() {
     document.querySelectorAll('[data-admin-only]').forEach((node) => {
-      node.hidden = !isAdmin;
+      node.hidden = !isAdmin || isNativeApp();
     });
-    if (!isAdmin && document.querySelector('#view-admin.active')) {
+    if ((!isAdmin || isNativeApp()) && document.querySelector('#view-admin.active')) {
       switchView('dashboard');
     }
   }
@@ -789,6 +1172,523 @@
       throw adminError;
     }
     return data;
+  }
+
+  async function callAccountApi(action, payload = {}, options = {}) {
+    if (!canSync()) {
+      if (!options.quiet) toast('Zaloguj się, żeby zarządzać kontem.');
+      return null;
+    }
+
+    const session = syncSession || (await supabaseClient.auth.getSession()).data.session;
+    if (!session || !session.access_token) {
+      if (!options.quiet) toast('Sesja wygasła. Zaloguj się ponownie.');
+      return null;
+    }
+
+    const { data, error } = await supabaseClient.functions.invoke('admin-api', {
+      body: { action, ...payload },
+      headers: {
+        Authorization: `Bearer ${session.access_token}`
+      }
+    });
+
+    if (error) {
+      if (!options.quiet) toast(`Konto: ${error.message}`);
+      throw error;
+    }
+    if (data && data.error) {
+      const accountError = new Error(data.error);
+      if (!options.quiet) toast(`Konto: ${data.error}`);
+      throw accountError;
+    }
+    return data;
+  }
+
+  function billingDefaults() {
+    return structuredCloneSafe(DEFAULT_BILLING_STATE);
+  }
+
+  async function callBillingApi(action, payload = {}, options = {}) {
+    if (!canSync()) {
+      if (!options.quiet) toast('Zaloguj sie, zeby sprawdzic Premium.');
+      return null;
+    }
+
+    const session = syncSession || (await supabaseClient.auth.getSession()).data.session;
+    if (!session || !session.access_token) {
+      if (!options.quiet) toast('Sesja wygasla. Zaloguj sie ponownie.');
+      return null;
+    }
+
+    const { data, error } = await supabaseClient.functions.invoke('billing-api', {
+      body: { action, ...payload },
+      headers: {
+        Authorization: `Bearer ${session.access_token}`
+      }
+    });
+
+    if (error) {
+      if (!options.quiet) toast(`Billing: ${error.message}`);
+      throw error;
+    }
+    if (data && data.error) {
+      const billingError = new Error(data.error);
+      if (data.code) billingError.code = data.code;
+      if (!options.quiet) toast(`Billing: ${data.error}`);
+      throw billingError;
+    }
+    return data;
+  }
+
+  async function initializeBillingForSession() {
+    if (!canSync()) {
+      billingState = billingDefaults();
+      nativeBillingReady = false;
+      updateNativeAdsVisibility();
+      return;
+    }
+
+    await configureNativeBilling().catch((error) => console.warn('RevenueCat init skipped', error));
+    await configureNativeAds().catch((error) => console.warn('AdMob init skipped', error));
+  }
+
+  async function configureNativeBilling() {
+    if (!isNativeApp() || !window.DietBillingNative || !syncSession || !syncSession.user) return false;
+    const config = window.DIET_APP_CONFIG || {};
+    const platform = window.DietBillingNative.platform || (window.DietNative && window.DietNative.platform);
+    const apiKey = platform === 'ios'
+      ? (config.revenueCatIosApiKey || config.revenueCatApiKey)
+      : (config.revenueCatAndroidApiKey || config.revenueCatApiKey);
+    if (!apiKey) {
+      nativeBillingReady = false;
+      return false;
+    }
+    const result = await window.DietBillingNative.configure({
+      apiKey,
+      appUserID: syncSession.user.id
+    });
+    nativeBillingReady = Boolean(result && result.ok);
+    return nativeBillingReady;
+  }
+
+  async function configureNativeAds() {
+    if (!isNativeApp() || !window.DietAdsNative) {
+      nativeAdsStatus = {
+        ...nativeAdsStatus,
+        configured: false,
+        visible: false,
+        lastAction: 'configure',
+        lastResult: isNativeApp() ? 'missing-native-wrapper' : 'web',
+        updatedAt: new Date().toISOString()
+      };
+      renderAdDiagnostics();
+      return false;
+    }
+    const config = window.DIET_APP_CONFIG || {};
+    try {
+      const result = await window.DietAdsNative.configure({
+        androidBannerId: config.admobAndroidBannerId,
+        iosBannerId: config.admobIosBannerId,
+        testing: config.admobTesting !== false
+      });
+      nativeAdsReady = Boolean(result && result.ok);
+      nativeAdsStatus = {
+        ...nativeAdsStatus,
+        ...((result && result.status) || {}),
+        configured: nativeAdsReady,
+        lastAction: 'configure',
+        lastResult: result && result.ok ? 'ok' : String((result && result.reason) || 'failed'),
+        lastError: (result && (result.error || (result.status && result.status.lastError))) || '',
+        updatedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      nativeAdsReady = false;
+      nativeAdsStatus = {
+        ...nativeAdsStatus,
+        configured: false,
+        visible: false,
+        lastAction: 'configure',
+        lastResult: 'error',
+        lastError: error instanceof Error ? error.message : String(error),
+        updatedAt: new Date().toISOString()
+      };
+    }
+    renderAdDiagnostics();
+    return nativeAdsReady;
+  }
+
+  async function refreshBillingState(options = {}) {
+    if (billingRefreshPromise) return billingRefreshPromise;
+    billingRefreshPromise = (async () => {
+      if (!canSync()) {
+        billingState = billingDefaults();
+      } else {
+        try {
+          billingState = normalizeBillingState(await callBillingApi('me', {}, { quiet: true }));
+        } catch (error) {
+          if (!options.quiet) toast('Nie udalo sie pobrac statusu Premium.');
+        }
+      }
+      renderBillingUI();
+      updateNativeAdsVisibility();
+      return billingState;
+    })().finally(() => {
+      billingRefreshPromise = null;
+    });
+    return billingRefreshPromise;
+  }
+
+  function normalizeBillingState(snapshot) {
+    const next = billingDefaults();
+    if (!snapshot || typeof snapshot !== 'object') return next;
+    next.plan = snapshot.plan === 'premium' ? 'premium' : 'free';
+    next.isPremium = Boolean(snapshot.isPremium || next.plan === 'premium');
+    BILLING_ENTITLEMENTS.forEach((key) => {
+      next.entitlements[key] = Boolean(snapshot.entitlements && snapshot.entitlements[key]);
+    });
+    next.isPremium = next.isPremium || Boolean(next.entitlements.premium_access);
+    next.showAds = Boolean(snapshot.showAds) && !next.isPremium;
+    next.period = String(snapshot.period || '');
+    ['ai_meal_analysis', 'ai_recipe_generation'].forEach((metric) => {
+      const row = snapshot.usage && snapshot.usage[metric] ? snapshot.usage[metric] : next.usage[metric];
+      const limit = Math.max(0, numberValue(row.limit, next.usage[metric].limit));
+      const used = Math.max(0, numberValue(row.used, 0));
+      next.usage[metric] = {
+        used,
+        limit,
+        remaining: Math.max(0, numberValue(row.remaining, limit - used))
+      };
+    });
+    if (snapshot.products && typeof snapshot.products === 'object') {
+      next.products = {
+        subscriptions: Array.isArray(snapshot.products.subscriptions) ? snapshot.products.subscriptions : next.products.subscriptions,
+        oneTime: Array.isArray(snapshot.products.oneTime) ? snapshot.products.oneTime : next.products.oneTime
+      };
+    }
+    return next;
+  }
+
+  function hasEntitlement(key) {
+    return Boolean(billingState && billingState.entitlements && billingState.entitlements[key]);
+  }
+
+  function isPremiumUser() {
+    return Boolean(billingState && (billingState.isPremium || hasEntitlement('premium_access')));
+  }
+
+  function showPaywall(reason = '') {
+    const modal = $('paywall-modal');
+    if (!modal) return;
+    const note = $('paywall-reason');
+    if (note) note.textContent = reason || 'Premium odblokowuje wieksze limity AI, przepisy dopasowane do celu i brak reklam.';
+    const nativeNote = $('paywall-native-note');
+    if (nativeNote) {
+      nativeNote.textContent = isNativeApp()
+        ? (nativeBillingReady ? 'Zakup obsluguje sklep aplikacji przez RevenueCat.' : 'Zakupy beda aktywne po dodaniu kluczy RevenueCat w config.js.')
+        : 'Na webie zakupy sa informacyjne. Realny zakup uruchamia sie w aplikacji mobilnej.';
+    }
+    modal.hidden = false;
+    document.body.classList.add('modal-open');
+    refreshIcons();
+  }
+
+  function hidePaywall() {
+    const modal = $('paywall-modal');
+    if (!modal) return;
+    modal.hidden = true;
+    document.body.classList.remove('modal-open');
+  }
+
+  async function buyProduct(productId) {
+    if (!productId) return;
+    if (!isNativeApp() || !window.DietBillingNative) {
+      toast('Zakupy sa dostepne w aplikacji mobilnej. Na webie widzisz tylko podglad paywalla.');
+      return;
+    }
+    if (!nativeBillingReady) {
+      await configureNativeBilling().catch(() => false);
+    }
+    if (!nativeBillingReady) {
+      toast('Brakuje konfiguracji RevenueCat dla aplikacji mobilnej.');
+      return;
+    }
+
+    try {
+      const result = await window.DietBillingNative.purchaseProduct(productId);
+      if (!result || !result.ok) {
+        toast(result && result.reason === 'product-not-found'
+          ? 'Ten produkt nie jest jeszcze skonfigurowany w RevenueCat.'
+          : 'Zakup nie zostal rozpoczęty.');
+        return;
+      }
+      await refreshBillingState({ quiet: true });
+      hidePaywall();
+      toast('Zakup zapisany. Odblokowuje Premium po synchronizacji sklepu.');
+    } catch (error) {
+      if (error && error.userCancelled) {
+        toast('Zakup anulowany.');
+        return;
+      }
+      toast(`Zakup nieudany: ${error.message || 'blad sklepu'}`);
+    }
+  }
+
+  async function restorePurchases() {
+    if (!isNativeApp() || !window.DietBillingNative) {
+      toast('Przywracanie zakupow dziala w aplikacji mobilnej.');
+      return;
+    }
+    if (!nativeBillingReady) {
+      await configureNativeBilling().catch(() => false);
+    }
+    if (!nativeBillingReady) {
+      toast('Brakuje konfiguracji RevenueCat.');
+      return;
+    }
+    try {
+      await window.DietBillingNative.restorePurchases();
+      await refreshBillingState({ quiet: true });
+      toast('Zakupy przywrocone. Jesli sklep wyslal webhook, status odswiezy sie automatycznie.');
+    } catch (error) {
+      toast(`Nie udalo sie przywrocic zakupow: ${error.message || 'blad sklepu'}`);
+    }
+  }
+
+  function manageSubscription() {
+    if (isNativeApp() && window.DietNative && window.DietNative.platform === 'android') {
+      const url = 'https://play.google.com/store/account/subscriptions?sku=dd_premium_monthly&package=pl.laxytt.nouria';
+      window.DietNative.openBrowser(url);
+      return;
+    }
+    if (isNativeApp() && window.DietNative && window.DietNative.platform === 'ios') {
+      window.DietNative.openBrowser('https://apps.apple.com/account/subscriptions');
+      return;
+    }
+    showPaywall('Zarzadzanie subskrypcja bedzie aktywne w aplikacji mobilnej po konfiguracji sklepow.');
+  }
+
+  function renderBillingUI() {
+    const planChip = $('premium-plan-chip');
+    const mealUsage = $('premium-ai-meal-usage');
+    const recipeUsage = $('premium-ai-recipe-usage');
+    const settingsNote = $('premium-settings-note');
+    if (planChip) {
+      planChip.textContent = isPremiumUser() ? 'Premium' : 'Free';
+      planChip.classList.toggle('online', isPremiumUser());
+    }
+    if (mealUsage) {
+      const usage = billingState.usage.ai_meal_analysis;
+      mealUsage.textContent = `${Math.round(usage.used)} / ${Math.round(usage.limit)}`;
+    }
+    if (recipeUsage) {
+      const usage = billingState.usage.ai_recipe_generation;
+      recipeUsage.textContent = `${Math.round(usage.used)} / ${Math.round(usage.limit)}`;
+    }
+    if (settingsNote) {
+      settingsNote.textContent = isPremiumUser()
+        ? 'Premium aktywne: reklamy ukryte, limity AI podniesione.'
+        : 'Plan darmowy: podstawowe funkcje zostaja darmowe, AI ma miesieczne limity.';
+    }
+
+    document.querySelectorAll('[data-paid-recipes="standard"]').forEach((button) => {
+      const unlocked = isPremiumUser() || hasEntitlement('standard_recipes_pack');
+      button.innerHTML = unlocked ? '<i data-lucide="badge-check"></i> Odblokowane' : '<i data-lucide="lock"></i> Kup pakiet';
+      button.classList.toggle('is-unlocked', unlocked);
+      button.setAttribute('aria-label', unlocked ? 'Standardowe przepisy odblokowane' : 'Kup standardowe przepisy');
+    });
+    document.querySelectorAll('[data-paid-recipes="personalized"]').forEach((button) => {
+      const unlocked = isPremiumUser() || hasEntitlement('personalized_recipes_pack');
+      button.innerHTML = unlocked ? '<i data-lucide="badge-check"></i> Odblokowane' : '<i data-lucide="lock"></i> Kup pakiet';
+      button.classList.toggle('is-unlocked', unlocked);
+      button.setAttribute('aria-label', unlocked ? 'Spersonalizowane przepisy odblokowane' : 'Kup spersonalizowane przepisy');
+    });
+
+    renderAdSlots();
+  }
+
+  function renderAdSlots() {
+    document.querySelectorAll('[data-ad-slot]').forEach((slot) => {
+      slot.hidden = true;
+    });
+  }
+
+  async function updateNativeAdsVisibility() {
+    if (!isNativeApp() || !window.DietAdsNative) {
+      nativeAdsStatus = {
+        ...nativeAdsStatus,
+        visible: false,
+        lastAction: 'visibility',
+        lastResult: isNativeApp() ? 'missing-native-wrapper' : 'web',
+        updatedAt: new Date().toISOString()
+      };
+      renderAdDiagnostics();
+      return;
+    }
+
+    const shouldShow = Boolean(
+      billingState &&
+      billingState.showAds &&
+      !isPremiumUser() &&
+      syncSession &&
+      nativeAdsReady
+    );
+
+    try {
+      const result = shouldShow
+        ? await window.DietAdsNative.showBanner({ margin: 88 })
+        : await window.DietAdsNative.hideBanner();
+      nativeAdsStatus = {
+        ...nativeAdsStatus,
+        ...((result && result.status) || {}),
+        configured: nativeAdsReady,
+        visible: Boolean(shouldShow && result && result.ok),
+        lastAction: shouldShow ? 'showBanner' : 'hideBanner',
+        lastResult: result && result.ok ? 'ok' : String((result && result.reason) || 'failed'),
+        lastError: (result && (result.error || (result.status && result.status.lastError))) || '',
+        updatedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      nativeAdsStatus = {
+        ...nativeAdsStatus,
+        visible: false,
+        lastAction: shouldShow ? 'showBanner' : 'hideBanner',
+        lastResult: 'error',
+        lastError: error instanceof Error ? error.message : String(error),
+        updatedAt: new Date().toISOString()
+      };
+    }
+    renderAdDiagnostics();
+  }
+
+  async function refreshAdDiagnostics() {
+    await configureNativeAds();
+    await updateNativeAdsVisibility();
+    renderAdDiagnostics();
+    toast('Status reklam odswiezony.');
+  }
+
+  function renderAdDiagnostics() {
+    const target = $('ad-diagnostics');
+    if (!target) return;
+    const config = window.DIET_APP_CONFIG || {};
+    const platform = (window.DietNative && window.DietNative.platform) || (window.DietAdsNative && window.DietAdsNative.platform) || 'web';
+    const bannerId = platform === 'ios'
+      ? (config.admobIosBannerId || '')
+      : (config.admobAndroidBannerId || '');
+    const rows = [
+      ['Platforma', isNativeApp() ? platform : 'web'],
+      ['Zalogowany', syncSession ? 'tak' : 'nie'],
+      ['Plan', isPremiumUser() ? 'Premium' : 'Darmowy'],
+      ['Backend showAds', billingState && billingState.showAds ? 'tak' : 'nie'],
+      ['AdMob ready', nativeAdsReady ? 'tak' : 'nie'],
+      ['Banner ID', bannerId ? maskId(bannerId) : 'brak'],
+      ['Tryb testowy', config.admobTesting === false ? 'nie' : 'tak'],
+      ['Skonfigurowane', nativeAdsStatus.configured ? 'tak' : 'nie'],
+      ['Widoczne', nativeAdsStatus.visible ? 'tak' : 'nie'],
+      ['Ostatnia akcja', nativeAdsStatus.lastAction || '-'],
+      ['Wynik', nativeAdsStatus.lastResult || '-'],
+      ['Blad', nativeAdsStatus.lastError || '-'],
+      ['Aktualizacja', nativeAdsStatus.updatedAt ? new Date(nativeAdsStatus.updatedAt).toLocaleString('pl-PL') : '-']
+    ];
+    target.innerHTML = rows.map(([label, value]) => `
+      <div>
+        <span>${escapeHTML(label)}</span>
+        <strong>${escapeHTML(value)}</strong>
+      </div>
+    `).join('');
+  }
+
+  function maskId(value) {
+    const text = String(value || '');
+    if (text.length <= 12) return text;
+    return `${text.slice(0, 12)}...${text.slice(-6)}`;
+  }
+
+  function handleUpgradeRequired(metric) {
+    refreshBillingState({ quiet: true });
+    const reason = metric === 'ai_recipe_generation'
+      ? 'Wykorzystano miesieczny limit generowania przepisow AI w darmowym planie.'
+      : 'Wykorzystano miesieczny limit analiz posilkow AI w darmowym planie.';
+    showPaywall(reason);
+  }
+
+  function isUpgradeRequiredPayload(data, error) {
+    if (data && data.code === 'upgrade_required') return true;
+    const status = error && (error.status || (error.context && error.context.status));
+    if (Number(status) === 402) return true;
+    const message = String(error && error.message ? error.message : '').toLowerCase();
+    return message.includes('402') || message.includes('upgrade_required');
+  }
+
+  async function grantAdminEntitlement(event) {
+    event.preventDefault();
+    await setAdminEntitlement(true);
+  }
+
+  async function revokeAdminEntitlement() {
+    await setAdminEntitlement(false);
+  }
+
+  async function setAdminEntitlement(active) {
+    if (!isAdmin) {
+      toast('Brak uprawnien administratora.');
+      return;
+    }
+    const email = $('admin-billing-email').value.trim().toLowerCase();
+    const entitlement = $('admin-billing-entitlement').value;
+    const expiresAt = $('admin-billing-expires').value;
+    if (!email) {
+      toast('Podaj email do billing grant.');
+      return;
+    }
+    await callBillingApi(active ? 'grantEntitlement' : 'revokeEntitlement', {
+      email,
+      entitlement,
+      expiresAt: active && expiresAt ? `${expiresAt}T23:59:59.000Z` : null
+    });
+    toast(active ? 'Entitlement nadany.' : 'Entitlement cofniety.');
+    await loadAdminDashboard();
+    await refreshBillingState({ quiet: true });
+  }
+
+  async function redeemPromoCodeFromSettings(event) {
+    event.preventDefault();
+    await redeemPromoCode($('promo-code-input'), $('promo-code-form'));
+  }
+
+  async function redeemPromoCodeFromPaywall(event) {
+    event.preventDefault();
+    await redeemPromoCode($('paywall-promo-code'), $('paywall-promo-form'));
+  }
+
+  async function redeemPromoCode(input, form) {
+    const code = String(input && input.value ? input.value : '').trim();
+    if (!code) {
+      toast('Wpisz kod testera.');
+      return;
+    }
+    if (!syncSession) {
+      toast('Zaloguj sie, zeby aktywowac kod.');
+      return;
+    }
+
+    const button = form && form.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+    try {
+      const result = await callBillingApi('redeemPromoCode', { code });
+      await refreshBillingState({ quiet: true });
+      if (input) input.value = '';
+      renderBillingUI();
+      renderAdSlots();
+      updateNativeAdsVisibility();
+      toast(result && result.alreadyRedeemed ? 'Kod byl juz aktywowany.' : 'Kod aktywowany. Premium odblokowane.');
+    } catch (error) {
+      console.error(error);
+      toast(error.message || 'Nie udalo sie aktywowac kodu.');
+    } finally {
+      if (button) button.disabled = false;
+    }
   }
 
   async function loadAdminDashboard() {
@@ -857,6 +1757,11 @@
     const assignment = user.assignment || {};
     const profile = user.profile || {};
     const stats = profile.stats || {};
+    const billing = user.billing || {};
+    const usage = Array.isArray(billing.usage) ? billing.usage : [];
+    const entitlements = Array.isArray(billing.entitlements) ? billing.entitlements.map((item) => item.entitlement).filter(Boolean) : [];
+    const mealUsage = usage.find((item) => item.metric === 'ai_meal_analysis') || {};
+    const recipeUsage = usage.find((item) => item.metric === 'ai_recipe_generation') || {};
     const status = assignment.status || 'no-access';
     const statusLabel = adminStatusLabel(status);
     const confirmed = user.confirmedAt ? 'Potwierdzony' : 'Niepotwierdzony';
@@ -872,6 +1777,10 @@
           <span>${Math.round(numberValue(stats.foods, 0))} produktów</span>
           <span>rev ${Math.round(numberValue(profile.revision, 0))}</span>
           <span>${profile.updatedAt ? formatDateTime(profile.updatedAt) : 'brak profilu'}</span>
+          <span>${billing.plan === 'premium' ? 'Premium' : 'Free'}</span>
+          <span>AI posilki ${Math.round(numberValue(mealUsage.used, 0))}/${Math.round(numberValue(mealUsage.limit, 0))}</span>
+          <span>AI przepisy ${Math.round(numberValue(recipeUsage.used, 0))}/${Math.round(numberValue(recipeUsage.limit, 0))}</span>
+          ${entitlements.length ? `<span>${escapeHTML(entitlements.join(', '))}</span>` : ''}
         </div>
         <div class="admin-user-actions">
           <button class="secondary-button compact" type="button" data-admin-edit>
@@ -945,6 +1854,7 @@
       $('admin-user-name').value = assignment.name || '';
       $('admin-user-status').value = assignment.status || 'active';
       $('admin-user-notes').value = assignment.notes || '';
+      if ($('admin-billing-email')) $('admin-billing-email').value = user.email || '';
       $('admin-user-email').focus();
       return;
     }
@@ -974,6 +1884,10 @@
   }
 
   function submitAuthForm(event) {
+    if (authMode === 'confirm') {
+      if (event) event.preventDefault();
+      return;
+    }
     if (authMode === 'reset') return requestPasswordReset(event);
     if (authMode === 'update-password') return updatePasswordFromRecovery(event);
     if (authMode === 'register') return signUpUser(event);
@@ -1004,8 +1918,8 @@
     ).catch((timeoutError) => ({ data: null, error: timeoutError }));
     if (error) {
       if (isConfirmationError(error)) {
-        setAuthMode('register');
-        toast('Ten email nie jest jeszcze potwierdzony. Możesz wysłać mail potwierdzający ponownie.');
+        setAuthMode('confirm');
+        toast('Ten email nie jest jeszcze potwierdzony. Możesz wysłać link ponownie.');
         setAuthBusy(source, false);
         return;
       }
@@ -1018,6 +1932,8 @@
     updateSyncUI();
     await loadAssignedProfile();
     await refreshAdminAccess();
+    await initializeBillingForSession();
+    await refreshBillingState({ quiet: true });
     setAuthBusy(source, false);
     if (!currentProfileAssignment && !isAdmin) return;
     setAuthMode('login');
@@ -1026,23 +1942,40 @@
 
   async function loginWithGoogle(event) {
     if (event) event.preventDefault();
+    await loginWithProvider('google');
+  }
+
+  async function loginWithApple(event) {
+    if (event) event.preventDefault();
+    await loginWithProvider('apple');
+  }
+
+  async function loginWithProvider(provider) {
     if (!supabaseClient) {
       toast('Najpierw skonfiguruj Supabase w config.js.');
       return;
     }
 
-    const { error } = await supabaseClient.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: authRedirectUrl(),
-        queryParams: {
-          prompt: 'select_account'
-        }
-      }
+    const native = isNativeApp();
+    const options = {
+      redirectTo: authRedirectUrl(),
+      skipBrowserRedirect: native
+    };
+    if (provider === 'google') {
+      options.queryParams = { prompt: 'select_account' };
+    }
+    const { data, error } = await supabaseClient.auth.signInWithOAuth({
+      provider,
+      options
     });
 
     if (error) {
-      toast(`Google Auth: ${error.message}`);
+      toast(`${provider === 'apple' ? 'Apple' : 'Google'} Auth: ${error.message}`);
+      return;
+    }
+
+    if (native && data && data.url && window.DietNative && window.DietNative.openBrowser) {
+      await window.DietNative.openBrowser(data.url);
     }
   }
 
@@ -1091,8 +2024,8 @@
     ).catch((timeoutError) => ({ data: null, error: timeoutError }));
     if (error) {
       if (isAlreadyRegisteredError(error)) {
-        setAuthMode('register');
-        toast('To konto może już istnieć. Jeśli mail nie przyszedł, wyślij potwierdzenie ponownie.');
+        setAuthMode('confirm');
+        toast('To konto może już istnieć. Możesz wysłać potwierdzenie ponownie.');
         setAuthBusy(source, false);
         return;
       }
@@ -1104,12 +2037,19 @@
     if (data.session) {
       await loadAssignedProfile();
       await refreshAdminAccess();
+      await initializeBillingForSession();
+      await refreshBillingState({ quiet: true });
       applySignupProfileToState(signupProfile);
     }
     setAuthBusy(source, false);
     updateSyncUI();
     if (data.session && !currentProfileAssignment) {
       toast('Konto utworzone, ale ten email nie ma przypisanego profilu diety.');
+      return;
+    }
+    if (!data.session) {
+      setAuthMode('confirm');
+      toast('Konto utworzone. Sprawdź skrzynkę, spam i oferty.');
       return;
     }
     toast(data.session ? 'Konto utworzone i zalogowane.' : 'Konto utworzone. Sprawdź skrzynkę, spam i oferty. Możesz też wysłać potwierdzenie ponownie.');
@@ -1190,6 +2130,8 @@
     $('gate-new-password').value = '';
     $('gate-new-password-confirm').value = '';
     if (canSync()) await loadAssignedProfile();
+    await initializeBillingForSession();
+    await refreshBillingState({ quiet: true });
     setAuthBusy(source, false);
     setAuthMode('login');
     updateSyncUI();
@@ -1230,10 +2172,11 @@
   }
 
   function setAuthMode(mode) {
-    authMode = ['register', 'reset', 'update-password'].includes(mode) ? mode : 'login';
+    authMode = ['register', 'reset', 'update-password', 'confirm'].includes(mode) ? mode : 'login';
     const isRegister = authMode === 'register';
     const isReset = authMode === 'reset';
     const isUpdatePassword = authMode === 'update-password';
+    const isConfirm = authMode === 'confirm';
     const isLogin = authMode === 'login';
     const prefix = 'gate-';
     const usernameInput = $(`${prefix}auth-username`);
@@ -1247,6 +2190,7 @@
     const note = $('gate-auth-note');
     const primaryButton = $('gate-login-button');
     const googleButton = $('gate-google-button');
+    const appleButton = $('gate-apple-button');
     const forgotButton = $('gate-forgot-button');
     const backButton = $('gate-auth-back-button');
     const resendButton = $('gate-resend-button');
@@ -1256,12 +2200,12 @@
     document.querySelectorAll('.recovery-field').forEach((element) => {
       element.hidden = !isUpdatePassword;
     });
-    if (modeSwitch) modeSwitch.hidden = isReset || isUpdatePassword;
+    if (modeSwitch) modeSwitch.hidden = isReset || isUpdatePassword || isConfirm;
     if (usernameInput) {
       usernameInput.required = isRegister;
       usernameInput.setAttribute('autocomplete', 'name');
     }
-    if (passwordField) passwordField.hidden = isReset || isUpdatePassword;
+    if (passwordField) passwordField.hidden = isReset || isUpdatePassword || isConfirm;
     if (passwordInput) {
       passwordInput.required = isLogin || isRegister;
       passwordInput.setAttribute('autocomplete', isRegister ? 'new-password' : 'current-password');
@@ -1269,33 +2213,38 @@
     if (loginTab) {
       loginTab.classList.toggle('is-active', isLogin);
       loginTab.setAttribute('aria-selected', String(isLogin));
-      loginTab.hidden = isUpdatePassword;
+      loginTab.hidden = isUpdatePassword || isConfirm;
     }
     if (registerTab) {
       registerTab.classList.toggle('is-active', isRegister);
       registerTab.setAttribute('aria-selected', String(isRegister));
-      registerTab.hidden = isUpdatePassword;
+      registerTab.hidden = isUpdatePassword || isConfirm;
     }
     if (title) {
       title.textContent = isUpdatePassword
         ? 'Ustaw nowe hasło'
-        : (isReset ? 'Reset hasła' : (isRegister ? 'Utwórz konto' : 'Zaloguj się'));
+        : (isReset ? 'Reset hasła' : (isConfirm ? 'Sprawdź skrzynkę' : (isRegister ? 'Utwórz konto' : 'Zaloguj się')));
     }
     if (subtitle) {
       subtitle.textContent = isRegister
         ? 'Załóż konto i uzupełnij opcjonalnie podstawowe dane.'
         : (isReset
           ? 'Wyślemy link do ustawienia nowego hasła.'
-          : (isUpdatePassword ? 'Wpisz nowe hasło do konta.' : 'Wróć do swojego profilu i synchronizacji.'));
+          : (isUpdatePassword
+            ? 'Wpisz nowe hasło do konta.'
+            : (isConfirm ? 'Wysłaliśmy link potwierdzający na podany email.' : 'Wróć do swojego profilu.')));
     }
     if (note) {
       note.textContent = isRegister
-        ? 'Po rejestracji wyślemy mail potwierdzający. Sprawdź też spam i oferty.'
+        ? 'Po rejestracji pokażemy ekran potwierdzenia maila.'
         : (isReset
           ? 'Po kliknięciu linku z maila wrócisz tutaj, żeby ustawić nowe hasło.'
-          : (isUpdatePassword ? 'Po zapisaniu hasła aplikacja wróci do profilu.' : 'Nie masz konta? Przełącz na rejestrację powyżej.'));
+          : (isUpdatePassword
+            ? 'Po zapisaniu hasła aplikacja wróci do profilu.'
+            : (isConfirm ? 'Nie widzisz wiadomości? Sprawdź spam i oferty albo wyślij link ponownie.' : 'Nie masz konta? Przełącz na rejestrację powyżej.')));
     }
     if (primaryButton) {
+      primaryButton.hidden = isConfirm;
       primaryButton.innerHTML = isUpdatePassword
         ? '<i data-lucide="save"></i> Zapisz nowe hasło'
         : (isReset
@@ -1303,15 +2252,21 @@
           : (isRegister ? '<i data-lucide="user-plus"></i> Zarejestruj' : '<i data-lucide="log-in"></i> Zaloguj'));
     }
     if (googleButton) {
-      googleButton.hidden = isReset || isUpdatePassword;
+      googleButton.hidden = isReset || isUpdatePassword || isConfirm;
       googleButton.innerHTML = isRegister
         ? '<span class="google-mark" aria-hidden="true">G</span> Zarejestruj przez Google'
         : '<span class="google-mark" aria-hidden="true">G</span> Zaloguj przez Google';
     }
+    if (appleButton) {
+      appleButton.hidden = !isNativeIOS() || isReset || isUpdatePassword || isConfirm;
+      appleButton.innerHTML = isRegister
+        ? '<span class="apple-mark" aria-hidden="true">Apple</span> Zarejestruj przez Apple'
+        : '<span class="apple-mark" aria-hidden="true">Apple</span> Zaloguj przez Apple';
+    }
     if (forgotButton) forgotButton.hidden = !isLogin;
     if (backButton) backButton.hidden = isLogin || isUpdatePassword;
     if (resendButton) {
-      resendButton.hidden = !isRegister;
+      resendButton.hidden = !isConfirm;
     }
     refreshIcons();
   }
@@ -1380,6 +2335,7 @@
   function setAuthBusy(source, busy, label = 'Loguję...', action = 'login') {
     const loginButton = $('gate-login-button');
     const googleButton = $('gate-google-button');
+    const appleButton = $('gate-apple-button');
     const forgotButton = $('gate-forgot-button');
     const backButton = $('gate-auth-back-button');
     const resendButton = $('gate-resend-button');
@@ -1403,6 +2359,7 @@
         : '<i data-lucide="mail-check"></i> Wyślij ponownie mail potwierdzający';
     }
     if (googleButton) googleButton.disabled = busy;
+    if (appleButton) appleButton.disabled = busy;
     if (forgotButton) forgotButton.disabled = busy;
     if (backButton) backButton.disabled = busy;
     if (loginTab) loginTab.disabled = busy;
@@ -1411,6 +2368,10 @@
   }
 
   function authRedirectUrl() {
+    const config = window.DIET_APP_CONFIG || {};
+    if (isNativeApp()) {
+      return config.nativeRedirectUrl || (window.DietNative && window.DietNative.redirectUrl) || 'nouria://auth-callback';
+    }
     const url = new URL(window.location.href);
     url.hash = '';
     url.search = '';
@@ -1441,10 +2402,14 @@
     currentProfileAssignment = null;
     isAdmin = false;
     adminState = { loading: false, loaded: false, error: '', users: [], logs: [] };
+    billingState = billingDefaults();
+    nativeBillingReady = false;
     remoteReady = false;
     passwordRecoveryMode = false;
     setAuthMode('login');
     updateSyncUI();
+    renderBillingUI();
+    updateNativeAdsVisibility();
     toast('Wylogowano. Dane lokalne nadal są na tym urządzeniu.');
   }
 
@@ -1745,6 +2710,7 @@
       plannedMeals: mergeById(base.plannedMeals, incoming.plannedMeals),
       shoppingLists: mergeById(base.shoppingLists, incoming.shoppingLists),
       weeklyReviews: { ...base.weeklyReviews, ...incoming.weeklyReviews },
+      gamification: mergeGamification(base.gamification, incoming.gamification),
       habitGoals: options.preferSettings === 'base'
         ? { ...defaultState.habitGoals, ...base.habitGoals }
         : { ...defaultState.habitGoals, ...incoming.habitGoals },
@@ -1815,6 +2781,125 @@
     const baseTime = Date.parse(base.generatedAt || '') || 0;
     const incomingTime = Date.parse(incoming.generatedAt || '') || 0;
     return incomingTime >= baseTime ? incoming : base;
+  }
+
+  function normalizeGamification(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const history = Array.isArray(source.history)
+      ? source.history
+          .filter((item) => item && item.action && item.createdAt)
+          .map((item) => ({
+            action: String(item.action || ''),
+            xp: Math.max(0, numberValue(item.xp, 0)),
+            label: String(item.label || ''),
+            createdAt: String(item.createdAt || '')
+          }))
+          .slice(-200)
+      : [];
+    const xp = Math.max(0, Math.round(numberValue(source.xp, 0)));
+    return {
+      xp,
+      level: Math.max(1, Math.floor(xp / 100) + 1),
+      badges: uniqueStrings(Array.isArray(source.badges) ? source.badges : []),
+      weeklyQuests: source.weeklyQuests && typeof source.weeklyQuests === 'object' && !Array.isArray(source.weeklyQuests)
+        ? source.weeklyQuests
+        : {},
+      claimedRewards: uniqueStrings(Array.isArray(source.claimedRewards) ? source.claimedRewards : []),
+      history
+    };
+  }
+
+  function mergeGamification(baseValue, incomingValue) {
+    const base = normalizeGamification(baseValue);
+    const incoming = normalizeGamification(incomingValue);
+    const historyByKey = new Map();
+    [...base.history, ...incoming.history].forEach((item) => {
+      historyByKey.set(`${item.action}:${item.createdAt}:${item.xp}`, item);
+    });
+    const history = [...historyByKey.values()]
+      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
+      .slice(-200);
+    const xp = Math.max(base.xp, incoming.xp, history.reduce((sum, item) => sum + Math.max(0, numberValue(item.xp, 0)), 0));
+    return normalizeGamification({
+      xp,
+      badges: uniqueStrings([...base.badges, ...incoming.badges]),
+      weeklyQuests: { ...base.weeklyQuests, ...incoming.weeklyQuests },
+      claimedRewards: uniqueStrings([...base.claimedRewards, ...incoming.claimedRewards]),
+      history
+    });
+  }
+
+  function awardXP(action, label = '') {
+    const xp = XP_RULES[action] || 0;
+    if (!xp) return;
+    state.gamification = normalizeGamification(state.gamification);
+    const createdAt = new Date().toISOString();
+    const todayKey = `${action}:${currentDate}`;
+    const dailyActions = new Set(['water_logged', 'weight_logged', 'plan_created', 'recipe_saved', 'ai_feedback']);
+    if (dailyActions.has(action) && state.gamification.history.some((item) => item.action === action && item.label === todayKey)) {
+      return;
+    }
+    state.gamification.history.push({
+      action,
+      xp,
+      label: dailyActions.has(action) ? todayKey : label,
+      createdAt
+    });
+    state.gamification.xp = Math.max(0, numberValue(state.gamification.xp, 0)) + xp;
+    state.gamification.level = Math.floor(state.gamification.xp / 100) + 1;
+    unlockBadges();
+  }
+
+  function unlockBadges() {
+    state.gamification = normalizeGamification(state.gamification);
+    const ctx = gamificationContext();
+    const unlocked = new Set(state.gamification.badges);
+    BADGE_DEFINITIONS.forEach((badge) => {
+      if (!unlocked.has(badge.id) && badge.condition(ctx)) unlocked.add(badge.id);
+    });
+    state.gamification.badges = [...unlocked];
+  }
+
+  function gamificationContext() {
+    const dates = lastNDates(7, currentDate);
+    return {
+      entries: state.entries.length,
+      streak: habitStreak(currentDate),
+      waterDays: dates.filter((date) => numberValue((state.water.find((item) => item.date === date) || {}).ml, 0) > 0).length,
+      plannedMeals: (state.plannedMeals || []).length,
+      aiFeedback: (state.gamification && state.gamification.history || []).filter((item) => item.action === 'ai_feedback').length
+    };
+  }
+
+  function renderGamification() {
+    state.gamification = normalizeGamification(state.gamification);
+    unlockBadges();
+    const levelChip = $('xp-level-chip');
+    const total = $('xp-total');
+    const meter = $('xp-meter');
+    const note = $('xp-next-note');
+    const strip = $('badge-strip');
+    if (!levelChip || !total || !meter || !note || !strip) return;
+
+    const xp = numberValue(state.gamification.xp, 0);
+    const level = Math.floor(xp / 100) + 1;
+    const progress = xp % 100;
+    levelChip.textContent = `Poziom ${level}`;
+    total.textContent = `${Math.round(xp)} XP`;
+    meter.style.width = `${progress}%`;
+    note.textContent = `${100 - progress} XP do kolejnego poziomu`;
+
+    const unlocked = new Set(state.gamification.badges);
+    strip.innerHTML = BADGE_DEFINITIONS.slice(0, 6).map((badge) => {
+      const active = unlocked.has(badge.id);
+      const label = currentLanguage() === 'en' ? (badge.en || badge.label) : badge.label;
+      return `
+        <span class="${active ? 'is-active' : ''}" title="${escapeHTML(label)}">
+          <i data-lucide="${badge.icon}"></i>
+          <small>${escapeHTML(label)}</small>
+        </span>
+      `;
+    }).join('');
   }
 
   function mergeProfile(baseProfile = {}, incomingProfile = {}) {
@@ -2116,6 +3201,9 @@
             </span>
             <span class="meal-title-actions">
               <small>${Math.round(totals.calories)} kcal · ${round1(totals.protein)}b / ${round1(totals.carbs)}w / ${round1(totals.fat)}t</small>
+              <button class="icon-button meal-add-button" type="button" data-add-meal="${meal}" aria-label="Dodaj wpis do ${mealLabel(meal)}" title="Dodaj wpis">
+                <i data-lucide="plus"></i>
+              </button>
               ${mealEntries.length ? `
                 <button class="icon-button subtle" type="button" data-save-template="${meal}" aria-label="Zapisz ${mealLabel(meal)} jako szablon" title="Zapisz jako szablon">
                   <i data-lucide="bookmark-plus"></i>
@@ -2260,7 +3348,8 @@
       });
       state.entries[entryIndex] = entry;
     } else {
-    state.entries.push(entry);
+      state.entries.push(entry);
+      awardXP('log_meal', entry.foodName);
     }
 
     saveState();
@@ -2328,6 +3417,7 @@
       const result = await requestMealAnalysis(text);
       aiDraft = normalizeAIResult(result, text);
       renderAIResult();
+      refreshBillingState({ quiet: true });
       toast('AI przygotowało wyliczenie. Sprawdź i zapisz.');
     } catch (error) {
       console.error(error);
@@ -2339,14 +3429,94 @@
     }
   }
 
-  async function requestMealAnalysis(text) {
+  async function analyzeMealFromPhoto() {
+    if (!isPremiumUser()) {
+      showPaywall('Rozpoznawanie posiłku ze zdjęcia jest funkcją Premium.');
+      return;
+    }
+    if (!syncSession) {
+      toast('Zaloguj się, żeby rozpoznać posiłek ze zdjęcia.');
+      return;
+    }
+
+    if (!isNativeApp() || !window.DietNative || !window.DietNative.pickImage) {
+      $('ai-meal-photo').click();
+      return;
+    }
+
+    try {
+      const dataUrl = await window.DietNative.pickImage({
+        source: 'camera',
+        quality: 82,
+        promptLabelHeader: 'Zdjęcie posiłku',
+        promptLabelPhoto: 'Zrób zdjęcie',
+        promptLabelPicture: 'Wybierz z galerii'
+      });
+      if (!dataUrl) return;
+      const compressed = await compressMealPhoto(dataUrlToFile(dataUrl, 'meal.jpg'));
+      await analyzeMealImageData(compressed);
+    } catch (error) {
+      console.error(error);
+      toast(`Nie udało się rozpoznać zdjęcia: ${error.message}`);
+    }
+  }
+
+  async function analyzeMealPhotoFile(event) {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast('Wybierz zdjęcie posiłku.');
+      return;
+    }
+    if (!isPremiumUser()) {
+      showPaywall('Rozpoznawanie posiłku ze zdjęcia jest funkcją Premium.');
+      return;
+    }
+
+    try {
+      const dataUrl = await compressMealPhoto(file);
+      await analyzeMealImageData(dataUrl);
+    } catch (error) {
+      console.error(error);
+      toast(`Nie udało się przygotować zdjęcia: ${error.message}`);
+    }
+  }
+
+  async function analyzeMealImageData(imageDataUrl) {
+    const button = $('ai-photo-button');
+    const hint = $('ai-meal-text').value.trim();
+    button.disabled = true;
+    button.innerHTML = '<i data-lucide="loader-circle"></i> Rozpoznaję...';
+    refreshIcons();
+
+    try {
+      const text = hint || 'Rozpoznaj posiłek ze zdjęcia i oszacuj kalorie oraz makro.';
+      const result = await requestMealAnalysis(text, { imageDataUrl });
+      aiDraft = normalizeAIResult(result, text);
+      renderAIResult();
+      refreshBillingState({ quiet: true });
+      toast('AI rozpoznało zdjęcie. Sprawdź wynik przed zapisem.');
+    } catch (error) {
+      console.error(error);
+      toast(error.message || 'Nie udało się rozpoznać posiłku ze zdjęcia.');
+    } finally {
+      button.disabled = false;
+      button.innerHTML = '<i data-lucide="camera"></i> Rozpoznaj ze zdjęcia <span class="premium-mini">Premium</span>';
+      refreshIcons();
+    }
+  }
+
+  async function requestMealAnalysis(text, options = {}) {
     const config = window.DIET_APP_CONFIG || {};
+    const imageDataUrl = options.imageDataUrl || '';
+    const locale = currentLanguage();
 
     if (config.aiEndpoint) {
       const response = await fetch(config.aiEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, profile: profileName(), date: currentDate })
+        body: JSON.stringify({ text, imageDataUrl, profile: profileName(), date: currentDate, locale })
       });
       if (!response.ok) throw new Error(`Backend AI zwrócił błąd ${response.status}.`);
       return response.json();
@@ -2354,8 +3524,12 @@
 
     if (supabaseClient && syncSession) {
       const { data, error } = await supabaseClient.functions.invoke('analyze-meal', {
-        body: { text, profile: profileName(), date: currentDate }
+        body: { text, imageDataUrl, profile: profileName(), date: currentDate, locale }
       });
+      if (isUpgradeRequiredPayload(data, error)) {
+        handleUpgradeRequired('ai_meal_analysis');
+        throw new Error('Limit AI w darmowym planie zostal wykorzystany.');
+      }
       if (error) throw new Error(error.message || 'Funkcja AI zwróciła błąd.');
       return data;
     }
@@ -2495,6 +3669,31 @@
         </button>
         <button class="ghost-button" type="button" data-clear-ai>Odrzuc</button>
       </div>
+      <div class="ai-feedback-panel">
+        <div>
+          <strong>Pomoz poprawic podpowiedzi AI</strong>
+          <span>Zbieramy poprawki, zeby lepiej rozumiec porcje, skladniki i jezyk opisow.</span>
+        </div>
+        <div class="ai-feedback-actions">
+          <select data-ai-feedback-reason aria-label="Powod feedbacku">
+            <option value="accurate">Trafione</option>
+            <option value="portion">Poprawilem porcje</option>
+            <option value="kcal">Poprawilem kcal</option>
+            <option value="macro">Poprawilem makro</option>
+            <option value="ingredient">Poprawilem skladnik</option>
+            <option value="language">Jezyk odpowiedzi</option>
+            <option value="other">Inne</option>
+          </select>
+          <button class="secondary-button" type="button" data-ai-feedback="good">
+            <i data-lucide="thumbs-up"></i>
+            Trafione
+          </button>
+          <button class="ghost-button" type="button" data-ai-feedback="corrected">
+            <i data-lucide="pencil"></i>
+            Poprawilem wynik
+          </button>
+        </div>
+      </div>
     `;
     refreshIcons();
   }
@@ -2536,6 +3735,13 @@
   }
 
   function handleAIResultAction(event) {
+    const feedbackButton = event.target.closest('[data-ai-feedback]');
+    if (feedbackButton && aiDraft) {
+      const reason = $('ai-result').querySelector('[data-ai-feedback-reason]');
+      submitAIFeedback(feedbackButton.dataset.aiFeedback, reason ? reason.value : '');
+      return;
+    }
+
     if (event.target.closest('[data-clear-ai]')) {
       aiDraft = null;
       renderAIResult();
@@ -2578,9 +3784,46 @@
 
     aiDraft = null;
     $('ai-meal-text').value = '';
+    awardXP('ai_meal_saved', 'AI meal saved');
     saveState();
     render();
     toast('Wynik AI zapisany w dzienniku.');
+  }
+
+  async function submitAIFeedback(kind, reason) {
+    if (!aiDraft) return;
+    syncAIResultFromInputs();
+    const payload = {
+      user_id: syncSession && syncSession.user ? syncSession.user.id : null,
+      rating: kind === 'good' ? 'good' : 'corrected',
+      reason: reason || (kind === 'good' ? 'accurate' : 'other'),
+      source_text: aiDraft.sourceText || $('ai-meal-text').value.trim(),
+      draft: aiDraft,
+      profile_id: currentProfileId,
+      language: currentLanguage()
+    };
+
+    try {
+      if (supabaseClient && syncSession) {
+        const { error } = await supabaseClient.from('ai_feedback').insert(payload);
+        if (error) throw error;
+      } else {
+        state.gamification = normalizeGamification(state.gamification);
+        state.gamification.history.push({
+          action: 'ai_feedback_local',
+          xp: 0,
+          label: payload.reason,
+          createdAt: new Date().toISOString()
+        });
+      }
+      awardXP('ai_feedback');
+      saveState();
+      renderGamification();
+      toast(kind === 'good' ? 'Dzieki za potwierdzenie wyniku.' : 'Dzieki, poprawka pomoze ulepszyc podpowiedzi.');
+    } catch (error) {
+      console.error(error);
+      toast('Nie udalo sie zapisac feedbacku AI.');
+    }
   }
 
   function entryNutritionFromForm(foodName, amount, unit) {
@@ -2620,9 +3863,11 @@
 
     if (weight !== null) {
       upsertByDate(state.weights, currentDate, { id: uid(), date: currentDate, weight });
+      awardXP('weight_logged');
     }
     if (water !== null) {
       upsertByDate(state.water, currentDate, { id: uid(), date: currentDate, ml: water });
+      awardXP('water_logged');
     }
 
     saveState();
@@ -2654,6 +3899,7 @@
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
+    awardXP('activity_logged');
 
     $('activity-minutes').value = '';
     $('activity-calories').value = '';
@@ -3243,7 +4489,10 @@
     };
 
     if (existingIndex >= 0) state.plannedMeals[existingIndex] = plannedMeal;
-    else state.plannedMeals.push(plannedMeal);
+    else {
+      state.plannedMeals.push(plannedMeal);
+      awardXP('plan_created');
+    }
     saveState();
     resetPlannedMealForm();
     render();
@@ -3558,27 +4807,61 @@
     }
   }
 
+  async function scanBarcodeNativeCamera() {
+    if (!isNativeApp() || !window.DietNative || !window.DietNative.pickImage) {
+      $('barcode-file').click();
+      return;
+    }
+
+    renderBarcodeResult('scan-loading');
+    try {
+      const imageUrl = await window.DietNative.pickImage({
+        source: 'camera',
+        quality: 92,
+        promptLabelHeader: 'Skan kodu kreskowego',
+        promptLabelPhoto: 'Zrob zdjecie kodu',
+        promptLabelPicture: 'Wybierz zdjecie'
+      });
+      const code = normalizeBarcode(imageUrl ? await detectBarcodeFromImageUrl(imageUrl) : '');
+      if (!code) {
+        renderBarcodeResult('scan-empty');
+        toast('Nie udało się odczytać kodu. Spróbuj jeszcze raz albo wpisz kod ręcznie.');
+        return;
+      }
+      $('barcode-input').value = code;
+      await lookupBarcode(code);
+    } catch (error) {
+      console.error(error);
+      renderBarcodeResult('scan-error', error.message);
+      toast(`Skanowanie aparatem nie powiodło się: ${error.message}`);
+    }
+  }
+
   async function detectBarcodeFromImageFile(file) {
     const imageUrl = URL.createObjectURL(file);
     try {
-      const image = await loadImageElement(imageUrl);
-      const candidates = await buildBarcodeImageCandidates(image);
-
-      for (const candidate of candidates) {
-        const code = await detectBarcodeNative(candidate).catch(() => '');
-        if (code) return code;
-      }
-
-      if (window.ZXing && window.ZXing.BrowserMultiFormatReader) {
-        for (const candidate of candidates) {
-          const code = await detectBarcodeWithZXing(candidate).catch(() => '');
-          if (code) return code;
-        }
-      }
-      return '';
+      return await detectBarcodeFromImageUrl(imageUrl);
     } finally {
       URL.revokeObjectURL(imageUrl);
     }
+  }
+
+  async function detectBarcodeFromImageUrl(imageUrl) {
+    const image = await loadImageElement(imageUrl);
+    const candidates = await buildBarcodeImageCandidates(image);
+
+    for (const candidate of candidates) {
+      const code = await detectBarcodeNative(candidate).catch(() => '');
+      if (code) return code;
+    }
+
+    if (window.ZXing && window.ZXing.BrowserMultiFormatReader) {
+      for (const candidate of candidates) {
+        const code = await detectBarcodeWithZXing(candidate).catch(() => '');
+        if (code) return code;
+      }
+    }
+    return '';
   }
 
   async function detectBarcodeNative(source) {
@@ -3874,7 +5157,10 @@
 
     const existingIndex = state.recipes.findIndex((item) => item.id === id);
     if (existingIndex >= 0) state.recipes[existingIndex] = recipe;
-    else state.recipes.push(recipe);
+    else {
+      state.recipes.push(recipe);
+      awardXP('recipe_saved');
+    }
 
     addRecipeAsFood(recipe);
     saveState();
@@ -4312,6 +5598,19 @@
     const button = event.target.closest('[data-paid-recipes]');
     if (!button) return;
     const variant = button.dataset.paidRecipes;
+    const personalized = variant === 'personalized';
+    const entitlement = personalized ? 'personalized_recipes_pack' : 'standard_recipes_pack';
+    const productId = personalized ? BILLING_PRODUCTS.personalizedPack : BILLING_PRODUCTS.standardPack;
+    if (isPremiumUser() || hasEntitlement(entitlement)) {
+      toast(personalized ? 'Spersonalizowane przepisy sa odblokowane.' : 'Standardowy pakiet przepisow jest odblokowany.');
+      return;
+    }
+    showPaywall(personalized
+      ? 'Spersonalizowany pakiet zapisuje 30 przepisow dobranych do celu i preferencji.'
+      : 'Standardowy pakiet odblokowuje gotowa biblioteke 50 przepisow.');
+    const primary = document.querySelector(`[data-buy-product="${productId}"]`);
+    if (primary) primary.focus();
+    return;
     const label = variant === 'personalized' ? 'spersonalizowane przepisy' : 'standardowe przepisy';
     toast(`Opcja „${label}” jest na razie zablokowana. Płatności dodamy w kolejnym kroku.`);
   }
@@ -4331,6 +5630,7 @@
       const response = await requestPersonalRecipes(context);
       state.aiRecipeSuggestions = normalizePersonalRecipeResponse(response);
       saveState();
+      refreshBillingState({ quiet: true });
       render();
       toast('AI przygotowalo spersonalizowane propozycje.');
     } catch (error) {
@@ -4359,6 +5659,10 @@
       const { data, error } = await supabaseClient.functions.invoke('recommend-recipes', {
         body: { context }
       });
+      if (isUpgradeRequiredPayload(data, error)) {
+        handleUpgradeRequired('ai_recipe_generation');
+        throw new Error('Limit generowania przepisow AI w darmowym planie zostal wykorzystany.');
+      }
       if (error) throw new Error(error.message || 'Funkcja AI zwrocila blad.');
       return data;
     }
@@ -4388,7 +5692,7 @@
     }));
 
     return {
-      locale: 'pl-PL',
+      locale: currentLanguage() === 'en' ? 'en-US' : 'pl-PL',
       date: currentDate,
       profile: profileName(),
       targets: {
@@ -4442,8 +5746,8 @@
     const summary = $('ai-recipes-summary');
     if (!container || !summary) return;
     const suggestions = normalizeAISuggestions(state.aiRecipeSuggestions);
-    const generated = suggestions.generatedAt ? `Wygenerowano: ${formatDateTime(suggestions.generatedAt)}.` : 'Kliknij Generuj, aby utworzyc propozycje z kontekstu profilu.';
-    summary.textContent = suggestions.summary || `${generated} RAG-lite uzywa celu, preferencji, ostatnich posilkow i zapisanych przepisow.`;
+    const generated = suggestions.generatedAt ? `Wygenerowano: ${formatDateTime(suggestions.generatedAt)}.` : 'Kliknij Generuj, aby utworzyć propozycje dopasowane do profilu.';
+    summary.textContent = suggestions.summary || `${generated} Aplikacja bierze pod uwagę cel, preferencje, ostatnie posiłki i zapisane przepisy.`;
     container.innerHTML = suggestions.items.length
       ? suggestions.items.map(renderAIRecipeCard).join('')
       : '<div class="empty-state">Brak propozycji AI. Uzupelnij preferencje i wygeneruj przepisy.</div>';
@@ -4615,6 +5919,46 @@
     }
   }
 
+  async function pickAvatarNative() {
+    if (!isNativeApp() || !window.DietNative || !window.DietNative.pickImage) {
+      $('avatar-input').click();
+      return;
+    }
+
+    try {
+      const dataUrl = await window.DietNative.pickImage({
+        quality: 82,
+        allowEditing: true,
+        promptLabelHeader: 'Zdjęcie profilowe',
+        promptLabelPhoto: 'Zrób zdjęcie',
+        promptLabelPicture: 'Wybierz z galerii'
+      });
+      if (!dataUrl) return;
+      const avatarDataUrl = await compressAvatar(dataUrlToFile(dataUrl, 'avatar.jpg'));
+      state.profile = {
+        ...(state.profile || {}),
+        avatarDataUrl,
+        avatarUpdatedAt: new Date().toISOString()
+      };
+      saveState();
+      render();
+      toast('Zdjęcie profilowe zapisane.');
+    } catch (error) {
+      toast(`Nie udało się dodać zdjęcia: ${error.message}`);
+    }
+  }
+
+  function dataUrlToFile(dataUrl, filename) {
+    const [header, base64] = String(dataUrl || '').split(',');
+    const mime = (header.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+    const binary = atob(base64 || '');
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return new File([bytes], filename, { type: mime });
+  }
+
   function removeAvatar() {
     state.profile = {
       ...(state.profile || {}),
@@ -4641,6 +5985,23 @@
     ctx.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
     const type = canvas.toDataURL('image/webp', 0.78).startsWith('data:image/webp') ? 'image/webp' : 'image/jpeg';
     return canvas.toDataURL(type, 0.78);
+  }
+
+  async function compressMealPhoto(file) {
+    const image = await loadImageFromFile(file);
+    const maxSide = 1024;
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
+    const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
+    const width = Math.max(1, Math.round(sourceWidth * scale));
+    const height = Math.max(1, Math.round(sourceHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Brak obsługi canvas.');
+    ctx.drawImage(image, 0, 0, width, height);
+    return canvas.toDataURL('image/jpeg', 0.78);
   }
 
   function loadImageFromFile(file) {
@@ -4813,7 +6174,7 @@
   }
 
   function shortWeekday(isoDate) {
-    return parseLocalDate(isoDate).toLocaleDateString('pl-PL', { weekday: 'short' }).slice(0, 2);
+    return parseLocalDate(isoDate).toLocaleDateString(currentLanguage() === 'en' ? 'en-US' : 'pl-PL', { weekday: 'short' }).slice(0, 2);
   }
 
   function renderSettings() {
@@ -4851,6 +6212,7 @@
       bodyGoal: $('profile-goal').value || '',
       autoTargets: Boolean($('profile-auto-targets').checked),
       theme: $('profile-theme').value === 'dark' ? 'dark' : 'light',
+      language: LANGUAGES.includes($('profile-language').value) ? $('profile-language').value : 'auto',
       calories: numberValue($('target-calories').value, 2200),
       protein: numberValue($('target-protein').value, 160),
       carbs: numberValue($('target-carbs').value, 230),
@@ -4883,6 +6245,7 @@
     $('profile-goal').value = state.settings.bodyGoal || '';
     $('profile-auto-targets').checked = Boolean(state.settings.autoTargets);
     $('profile-theme').value = currentTheme();
+    $('profile-language').value = currentLanguageSetting();
     $('target-calories').value = state.settings.calories;
     $('target-protein').value = state.settings.protein;
     $('target-carbs').value = state.settings.carbs;
@@ -5171,29 +6534,18 @@
       return;
     }
 
-    if (!window.XLSX) {
+    if (!window.DietExcel) {
       toast('Import Excela wymaga parsera XLSX. Import CSV jest dostępny.');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const workbook = window.XLSX.read(reader.result, { type: 'array', cellDates: true });
-        const sheetName = workbook.SheetNames.find((name) => {
-          const rows = window.XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, defval: '', raw: false });
-          return rows.length > 1;
-        }) || workbook.SheetNames[0];
-        const rows = window.XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '', raw: false });
-        prepareImport(rows);
-        toast(`Wczytano arkusz: ${sheetName}.`);
-      } catch (error) {
-        console.error(error);
-        toast('Nie udało się odczytać pliku Excela.');
-      }
-    };
-    reader.onerror = () => toast('Nie udało się wczytać pliku Excela.');
-    reader.readAsArrayBuffer(file);
+    window.DietExcel.readRows(file).then(({ rows, sheetName }) => {
+      prepareImport(rows);
+      toast(`Wczytano arkusz: ${sheetName}.`);
+    }).catch((error) => {
+      console.error(error);
+      toast('Nie udało się odczytać pliku Excela.');
+    });
   }
 
   function prepareImport(rawRows) {
@@ -5419,7 +6771,7 @@
   }
 
   function exportJSON() {
-    downloadFile(`dziennik-diety-${todayISO()}.json`, JSON.stringify(state, null, 2), 'application/json');
+    downloadFile(`nouria-${todayISO()}.json`, JSON.stringify(state, null, 2), 'application/json');
   }
 
   function exportCSV() {
@@ -5440,7 +6792,7 @@
           entry.fat
         ])
     ];
-    downloadFile(`dziennik-diety-wpisy-${todayISO()}.csv`, toCSV(rows), 'text/csv');
+    downloadFile(`nouria-wpisy-${todayISO()}.csv`, toCSV(rows), 'text/csv');
   }
 
   function resetApp() {
@@ -5458,6 +6810,39 @@
     saveState();
     render();
     toast(`Profil ${profileName()} zresetowany.`);
+  }
+
+  async function deleteAccount() {
+    if (!canSync()) {
+      toast('Zaloguj się, żeby usunąć konto.');
+      return;
+    }
+    const email = (syncSession.user && syncSession.user.email ? syncSession.user.email : '').toLowerCase();
+    const typed = window.prompt(`To trwale usunie konto, przypisanie profilu i dane w Supabase. Wpisz email, żeby potwierdzić: ${email}`);
+    if (!typed) return;
+    if (typed.trim().toLowerCase() !== email) {
+      toast('Email nie pasuje. Konto nie zostało usunięte.');
+      return;
+    }
+
+    createLocalBackup('account-delete');
+    try {
+      await callAccountApi('deleteOwnAccount', { confirmEmail: email });
+      try {
+        await supabaseClient.auth.signOut({ scope: 'local' });
+      } catch (_error) {
+        await supabaseClient.auth.signOut().catch(() => {});
+      }
+      syncSession = null;
+      currentProfileAssignment = null;
+      isAdmin = false;
+      remoteReady = false;
+      updateSyncUI();
+      renderProfileBadge();
+      toast('Konto usunięte. Lokalny backup JSON został zapisany w tej przeglądarce.');
+    } catch (error) {
+      toast(`Nie udało się usunąć konta: ${error.message}`);
+    }
   }
 
   function renderCharts() {
@@ -6117,6 +7502,7 @@
       weeklyReviews: rawState && rawState.weeklyReviews && typeof rawState.weeklyReviews === 'object' && !Array.isArray(rawState.weeklyReviews)
         ? rawState.weeklyReviews
         : {},
+      gamification: normalizeGamification(rawState && rawState.gamification),
       habitGoals: { ...defaultState.habitGoals, ...((rawState && rawState.habitGoals) || {}) },
       preferences: {
         ...defaultState.preferences,
@@ -6444,7 +7830,7 @@
   }
 
   function formatDateLabel(isoDate) {
-    return parseLocalDate(isoDate).toLocaleDateString('pl-PL', {
+    return parseLocalDate(isoDate).toLocaleDateString(currentLanguage() === 'en' ? 'en-US' : 'pl-PL', {
       weekday: 'short',
       month: 'short',
       day: 'numeric'
@@ -6452,7 +7838,7 @@
   }
 
   function shortDate(isoDate) {
-    return parseLocalDate(isoDate).toLocaleDateString('pl-PL', {
+    return parseLocalDate(isoDate).toLocaleDateString(currentLanguage() === 'en' ? 'en-US' : 'pl-PL', {
       month: 'short',
       day: 'numeric'
     });
@@ -6460,6 +7846,135 @@
 
   function shortDay(isoDate) {
     return parseLocalDate(isoDate).toLocaleDateString('pl-PL', { day: 'numeric' });
+  }
+
+  function compactDate(isoDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(isoDate || ''))) return '';
+    const [year, month, day] = isoDate.split('-');
+    return `${day}.${month}.${year}`;
+  }
+
+  function updateSelectedDateControl() {
+    const dateInput = $('selected-date');
+    const dateLabel = $('selected-date-label');
+    if (dateInput) dateInput.value = currentDate;
+    if (dateLabel) dateLabel.textContent = compactDate(currentDate);
+  }
+
+  function renderDateStrip() {
+    const strip = $('diary-date-strip');
+    if (!strip) return;
+    const today = todayISO();
+    const dates = [-3, -2, -1, 0, 1, 2, 3].map((delta) => addDays(currentDate, delta));
+    strip.innerHTML = dates.map((date) => {
+      const isActive = date === currentDate;
+      const relative = date === today
+        ? (currentLanguage() === 'en' ? 'Today' : 'Dzisiaj')
+        : date === addDays(today, -1)
+          ? (currentLanguage() === 'en' ? 'Yesterday' : 'Wczoraj')
+          : date === addDays(today, 1)
+            ? (currentLanguage() === 'en' ? 'Tomorrow' : 'Jutro')
+            : shortWeekday(date);
+      const totals = totalsForDate(date);
+      return `
+        <button class="${isActive ? 'is-active' : ''}" type="button" data-strip-date="${date}" aria-pressed="${isActive}">
+          <span>${escapeHTML(relative)}</span>
+          <strong>${shortDay(date)}</strong>
+          <small>${Math.round(totals.calories)} kcal</small>
+        </button>
+      `;
+    }).join('');
+  }
+
+  function bindDateStripGestures() {
+    const shell = document.querySelector('.mobile-date-strip-shell');
+    const strip = $('diary-date-strip');
+    if (!shell || !strip || shell.dataset.bound === 'true') return;
+    shell.dataset.bound = 'true';
+    shell.addEventListener('pointerdown', (event) => {
+      if (event.target.closest('button')) return;
+      dateStripDrag = { startX: event.clientX, currentX: event.clientX, pointerId: event.pointerId };
+      shell.setPointerCapture(event.pointerId);
+    });
+    shell.addEventListener('pointermove', (event) => {
+      if (!dateStripDrag || dateStripDrag.pointerId !== event.pointerId) return;
+      dateStripDrag.currentX = event.clientX;
+      const delta = Math.max(-72, Math.min(72, event.clientX - dateStripDrag.startX));
+      strip.style.transform = `translateX(${delta}px)`;
+    });
+    const finish = (event) => {
+      if (!dateStripDrag || dateStripDrag.pointerId !== event.pointerId) return;
+      const delta = dateStripDrag.currentX - dateStripDrag.startX;
+      strip.style.transform = '';
+      dateStripDrag = null;
+      if (Math.abs(delta) > 44) shiftDate(delta < 0 ? 1 : -1);
+    };
+    shell.addEventListener('pointerup', finish);
+    shell.addEventListener('pointercancel', finish);
+  }
+
+  function openCalendarModal() {
+    calendarMonthDate = currentDate;
+    renderCalendar();
+    const modal = $('calendar-modal');
+    if (modal) modal.hidden = false;
+  }
+
+  function closeCalendarModal() {
+    const modal = $('calendar-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function shiftCalendarMonth(delta) {
+    const date = parseLocalDate(calendarMonthDate);
+    date.setMonth(date.getMonth() + delta);
+    calendarMonthDate = toISODate(date);
+    renderCalendar();
+  }
+
+  function renderCalendar() {
+    const title = $('calendar-title');
+    const grid = $('calendar-grid');
+    if (!title || !grid) return;
+    const locale = currentLanguage() === 'en' ? 'en-US' : 'pl-PL';
+    const monthDate = parseLocalDate(calendarMonthDate);
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    title.textContent = monthDate.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+    const first = new Date(year, month, 1);
+    const startOffset = (first.getDay() + 6) % 7;
+    const start = new Date(year, month, 1 - startOffset);
+    const weekdayLabels = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(2026, 5, 1 + index);
+      return `<span class="calendar-weekday">${escapeHTML(date.toLocaleDateString(locale, { weekday: 'short' }).slice(0, 2))}</span>`;
+    }).join('');
+    const days = Array.from({ length: 42 }, (_, index) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
+      const iso = toISODate(date);
+      const totals = totalsForDate(iso);
+      return `
+        <button type="button" data-calendar-date="${iso}" class="${iso === currentDate ? 'is-active' : ''} ${date.getMonth() !== month ? 'is-muted' : ''}">
+          <strong>${date.getDate()}</strong>
+          <small>${Math.round(totals.calories) || ''}</small>
+        </button>
+      `;
+    }).join('');
+    grid.innerHTML = weekdayLabels + days;
+  }
+
+  function openDatePicker(input) {
+    if (!input) return;
+    if (typeof input.showPicker === 'function') {
+      try {
+        input.showPicker();
+        return;
+      } catch (error) {
+        // Some WebViews expose showPicker but reject it for visually hidden inputs.
+      }
+    }
+    input.focus({ preventScroll: true });
+    input.click();
   }
 
   function shiftDate(delta) {
@@ -6534,6 +8049,7 @@
   }
 
   function registerServiceWorker() {
+    if (isNativeApp()) return;
     if (!('serviceWorker' in navigator)) return;
     if (!/^https?:$/.test(window.location.protocol)) return;
     navigator.serviceWorker.register('sw.js').then((registration) => {

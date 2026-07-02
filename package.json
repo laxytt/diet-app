@@ -1,0 +1,41 @@
+{
+  "name": "nouria",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:web": "vite build && node scripts/copy_static_assets.mjs",
+    "build": "npm run build:web",
+    "preview": "vite preview --host 127.0.0.1",
+    "test:ui": "playwright test",
+    "test:ui:headed": "playwright test --headed",
+    "mobile:sync": "npm run build:web && cap sync",
+    "mobile:assets": "node scripts/generate_mobile_assets.mjs",
+    "android:add": "cap add android",
+    "android:bundle": "npm run mobile:sync && cd android && gradlew.bat :app:bundleRelease",
+    "android:open": "npm run mobile:sync && cap open android",
+    "ios:add": "cap add ios",
+    "ios:open": "npm run mobile:sync && cap open ios"
+  },
+  "dependencies": {
+    "@capacitor-community/admob": "^7.0.3",
+    "@capacitor/app": "^7.0.2",
+    "@capacitor/browser": "^7.0.2",
+    "@capacitor/camera": "^7.0.2",
+    "@capacitor/core": "^7.4.3",
+    "@revenuecat/purchases-capacitor": "^11.3.2",
+    "@supabase/supabase-js": "^2.50.0",
+    "@zxing/library": "^0.21.3",
+    "lucide": "^0.468.0",
+    "read-excel-file": "^9.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/cli": "^7.4.3",
+    "@capacitor/ios": "^7.4.3",
+    "@playwright/test": "^1.61.1",
+    "sharp": "^0.34.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.0"
+  }
+}

@@ -68,14 +68,22 @@ Deno.serve(async (request) => {
   const model = Deno.env.get('OPENAI_RECIPE_MODEL') || Deno.env.get('OPENAI_MODEL') || 'gpt-5.4-mini';
   const body = await request.json().catch(() => ({}));
   const context = sanitizeContext(body.context);
+  const locale = String((context as any)?.locale || 'pl-PL').toLowerCase().startsWith('en') ? 'en' : 'pl';
   if (!context) {
     return json({ error: 'Missing recipe context' }, 400);
   }
 
+  const usage = await consumeUsage(auth.user.id, 'ai_recipe_generation');
+  if (!usage.ok) {
+    return json(usage, 402);
+  }
+
   const prompt = [
-    'Jestes dietetycznym asystentem przepisow dla aplikacji Dziennik Diety.',
+    'Jestes dietetycznym asystentem przepisow dla aplikacji Nouria.',
     'Dostajesz maly kontekst RAG: cele, preferencje, ostatnie posilki i znalezione przepisy uzytkownika.',
-    'Wygeneruj praktyczne, latwe do zapisania przepisy po polsku.',
+    locale === 'en'
+      ? 'Generate practical, easy-to-save recipes in English.'
+      : 'Wygeneruj praktyczne, latwe do zapisania przepisy po polsku.',
     'Nie uzywaj skladnikow wykluczonych. Jesli uzytkownik czegos nie lubi, unikaj tego.',
     'Dopasuj kcal i makro do celu uzytkownika. Dla redukcji preferuj syte, wysokobialkowe porcje.',
     'Nie dawaj porad medycznych. Zwracaj wylacznie JSON zgodny ze schematem.'
@@ -156,6 +164,48 @@ function sanitizeContext(context: unknown): unknown {
     return { truncated: true, payload: text.slice(0, 16000) };
   }
   return context;
+}
+
+async function consumeUsage(userId: string, metric: string) {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !serviceRoleKey) {
+    return { ok: false, error: 'Missing billing environment' };
+  }
+
+  const service = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  }) as any;
+  const period = currentPeriod();
+  const premium = await isPremium(service, userId);
+  const limit = premium ? 30 : 2;
+  const { data, error } = await service.rpc('billing_consume_usage', {
+    p_user_id: userId,
+    p_metric: metric,
+    p_period: period,
+    p_limit: limit
+  });
+  if (error) return { ok: false, error: error.message };
+  const row = Array.isArray(data) && data[0] ? data[0] : null;
+  if (!row || Number(row.used || 0) > limit) {
+    return { ok: false, code: 'upgrade_required', metric, used: limit, limit, plan: premium ? 'premium' : 'free' };
+  }
+  return { ok: true, metric, used: Number(row.used || 0), limit, plan: premium ? 'premium' : 'free' };
+}
+
+async function isPremium(service: any, userId: string) {
+  const { data, error } = await service
+    .from('billing_entitlements')
+    .select('active, expires_at')
+    .eq('user_id', userId)
+    .eq('entitlement', 'premium_access')
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data && data.active && (!data.expires_at || new Date(data.expires_at).getTime() > Date.now()));
+}
+
+function currentPeriod(date = new Date()) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
 function extractOutputText(data: any): string {

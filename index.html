@@ -2,27 +2,26 @@
 <html lang="pl">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#2f7d59">
-    <title>Dziennik Diety</title>
+    <title>Nouria</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="styles.css">
-    <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
-    <script defer src="config.js"></script>
-    <script defer src="app.js"></script>
+    <script type="module" src="./src/main.js"></script>
   </head>
   <body>
-    <div class="app-shell">
+    <div class="app-shell app-booting">
       <header class="topbar">
         <div class="brand-lockup">
           <div class="brand-mark" aria-hidden="true">
-            <i data-lucide="activity"></i>
+            <svg viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true">
+              <path d="M4 13c0-5 7-9 16-9 0 9-4 16-9 16a7 7 0 0 1-7-7Z"></path>
+              <path d="M4 13c4.5-.2 8-2 12-6"></path>
+              <path d="M8 17c1.2-3 3.7-5.7 8-8"></path>
+            </svg>
           </div>
           <div>
-            <h1>Dziennik Diety</h1>
+            <h1>Nouria</h1>
             <p id="today-summary">Panel żywienia</p>
           </div>
         </div>
@@ -44,7 +43,13 @@
           <button class="icon-button" id="prev-day" type="button" aria-label="Poprzedni dzień" title="Poprzedni dzień">
             <i data-lucide="chevron-left"></i>
           </button>
-          <input id="selected-date" type="date">
+          <div class="date-picker-shell">
+            <button class="date-display-button" id="selected-date-display" type="button" aria-label="Wybierz datę">
+              <span id="selected-date-label">--.--.----</span>
+              <i data-lucide="calendar"></i>
+            </button>
+            <input id="selected-date" class="date-native-input" type="date" tabindex="-1" aria-hidden="true">
+          </div>
           <button class="icon-button" id="next-day" type="button" aria-label="Następny dzień" title="Następny dzień">
             <i data-lucide="chevron-right"></i>
           </button>
@@ -60,7 +65,7 @@
         <div class="auth-story">
           <div class="auth-brand-chip">
             <i data-lucide="leaf"></i>
-            Diet Notes
+            Nouria
           </div>
           <h2>Spokojne miejsce na jedzenie, cele i postęp.</h2>
           <p>Notuj posiłki, pilnuj makro i wracaj do danych bez chaosu między urządzeniami.</p>
@@ -77,10 +82,17 @@
             </div>
             <div>
               <h2 id="auth-title">Zaloguj się</h2>
-              <p id="auth-subtitle">Synchronizuj profil Agnieszki na każdym urządzeniu.</p>
+              <p id="auth-subtitle">Wróć do swojego profilu i zapisanych danych.</p>
             </div>
-            <span class="stat-chip">Sync</span>
           </div>
+          <label class="auth-language-select">
+            <span>Język</span>
+            <select id="auth-language">
+              <option value="auto">Automatycznie</option>
+              <option value="pl">Polski</option>
+              <option value="en">English</option>
+            </select>
+          </label>
           <div class="auth-mode-switch" role="tablist" aria-label="Tryb konta">
             <button class="is-active" id="auth-login-tab" type="button" role="tab" aria-selected="true">
               Logowanie
@@ -146,6 +158,10 @@
                 <span class="google-mark" aria-hidden="true">G</span>
                 Zaloguj przez Google
               </button>
+              <button class="secondary-button apple-button native-auth-button" id="gate-apple-button" type="button" hidden>
+                <span class="apple-mark" aria-hidden="true">Apple</span>
+                Zaloguj przez Apple
+              </button>
               <button class="ghost-button auth-forgot-button" id="gate-forgot-button" type="button">
                 <i data-lucide="key-round"></i>
                 Nie pamiętasz hasła?
@@ -201,24 +217,13 @@
           <i data-lucide="shield-check"></i>
           <span>Admin</span>
         </button>
-              <button class="tab-button mobile-more-tab" id="mobile-more-button" type="button" aria-expanded="false" aria-controls="mobile-more-menu">
-          <i data-lucide="ellipsis"></i>
-          <span>Więcej</span>
-        </button>
       </nav>
-      <div class="mobile-more-menu" id="mobile-more-menu" hidden>
-        <button type="button" data-view="recipes"><i data-lucide="utensils"></i>Przepisy</button>
-        <button type="button" data-view="trends"><i data-lucide="chart-line"></i>Trendy</button>
-        <button type="button" data-view="import"><i data-lucide="file-spreadsheet"></i>Import</button>
-        <button type="button" data-view="settings"><i data-lucide="sliders-horizontal"></i>Ustawienia</button>
-        <button type="button" data-view="admin" data-admin-only hidden><i data-lucide="shield-check"></i>Admin</button>
-      </div>
 
       <main id="main-content">
         <section class="view active" id="view-dashboard">
           <section class="dashboard-hero">
             <div>
-              <span class="section-kicker">Dashboard</span>
+              <span class="section-kicker">Panel</span>
               <h2 id="dashboard-title">Dzisiaj</h2>
               <p id="dashboard-subtitle">Spokojny plan, konkretne liczby i szybkie decyzje.</p>
             </div>
@@ -236,6 +241,64 @@
                 <span id="dashboard-avatar-initials" class="dashboard-avatar-initials">A</span>
                 <strong id="dashboard-profile-name">Agnieszka</strong>
               </div>
+            </div>
+          </section>
+
+          <section class="panel dashboard-shortcuts-panel" aria-label="Skróty do sekcji">
+            <div class="panel-heading compact-heading">
+              <div>
+                <h2>Skróty</h2>
+                <p>Rzadziej używane funkcje bez przeładowywania dolnego paska.</p>
+              </div>
+              <span class="stat-chip">Centrum</span>
+            </div>
+            <div class="dashboard-shortcuts">
+              <button type="button" data-view="recipes">
+                <span class="shortcut-icon"><i data-lucide="utensils"></i></span>
+                <strong>Przepisy</strong>
+                <small>Pomysły, filtry i pakiety Premium</small>
+              </button>
+              <button type="button" data-view="trends">
+                <span class="shortcut-icon"><i data-lucide="chart-line"></i></span>
+                <strong>Trendy</strong>
+                <small>Waga, makro i podsumowania tygodnia</small>
+              </button>
+              <button type="button" data-view="import">
+                <span class="shortcut-icon"><i data-lucide="file-spreadsheet"></i></span>
+                <strong>Import</strong>
+                <small>CSV, kopie i przenoszenie danych</small>
+              </button>
+              <button type="button" data-view="settings">
+                <span class="shortcut-icon"><i data-lucide="sliders-horizontal"></i></span>
+                <strong>Ustawienia</strong>
+                <small>Profil, cele, konto i Premium</small>
+              </button>
+              <button class="admin-only" type="button" data-view="admin" data-admin-only hidden>
+                <span class="shortcut-icon"><i data-lucide="shield-check"></i></span>
+                <strong>Admin</strong>
+                <small>Użytkownicy, dostęp i rozliczenia</small>
+              </button>
+            </div>
+          </section>
+
+          <section class="panel motivation-panel" aria-label="Motywacja i postęp">
+            <div class="panel-heading compact-heading">
+              <div>
+                <h2>Postęp tygodnia</h2>
+                <p>Zdobywaj punkty za regularne, zdrowe działania.</p>
+              </div>
+              <span class="stat-chip" id="xp-level-chip">Poziom 1</span>
+            </div>
+            <div class="motivation-grid">
+              <div class="xp-card">
+                <div>
+                  <span>Doświadczenie</span>
+                  <strong id="xp-total">0 XP</strong>
+                </div>
+                <div class="meter"><span id="xp-meter"></span></div>
+                <small id="xp-next-note">Dodaj pierwszy wpis, żeby zacząć.</small>
+              </div>
+              <div class="badge-strip" id="badge-strip"></div>
             </div>
           </section>
 
@@ -357,6 +420,8 @@
             </article>
           </section>
 
+          <section class="ad-slot" id="dashboard-ad-slot" data-ad-slot="dashboard" hidden aria-label="Reklama"></section>
+
           <section class="panel dashboard-meals-panel">
             <div class="panel-heading compact-heading">
               <h2>Dzisiejsze posiłki</h2>
@@ -394,6 +459,21 @@
               <i data-lucide="plus"></i>
               Dodaj wpis
             </button>
+          </section>
+
+          <section class="mobile-date-strip-panel" aria-label="Kalendarz dziennika">
+            <div class="mobile-date-strip-shell">
+              <button class="icon-button date-strip-nav" id="date-strip-prev" type="button" aria-label="Poprzedni dzień">
+                <i data-lucide="chevron-left"></i>
+              </button>
+              <div class="mobile-date-strip" id="diary-date-strip" tabindex="0" aria-label="Przesuwany wybór dnia"></div>
+              <button class="icon-button date-strip-nav" id="date-strip-next" type="button" aria-label="Następny dzień">
+                <i data-lucide="chevron-right"></i>
+              </button>
+              <button class="icon-button date-strip-calendar" id="date-strip-calendar" type="button" aria-label="Otwórz kalendarz">
+                <i data-lucide="calendar-days"></i>
+              </button>
+            </div>
           </section>
 
           <section class="workspace-grid">
@@ -497,12 +577,27 @@
                   <span class="stat-chip">AI</span>
                 </div>
                 <textarea id="ai-meal-text" rows="4" placeholder="Np. sałatka z dwoma łyżkami oleju, 150g kurczaka i kromką chleba"></textarea>
+                <details class="ai-help" id="ai-help">
+                  <summary><i data-lucide="lightbulb"></i> Jak opisać posiłek, żeby wynik był lepszy?</summary>
+                  <ul>
+                    <li>Podaj ilość lub gramaturę: „150 g kurczaka”, „2 kromki chleba”.</li>
+                    <li>Dopisz tłuszcze, sosy i dodatki: „łyżka oliwy”, „10 g masła”.</li>
+                    <li>Jeśli znasz markę albo opakowanie, wpisz je wprost.</li>
+                    <li>Przykład: „skyr 150 g, banan, 20 g płatków, 10 g masła orzechowego”.</li>
+                  </ul>
+                </details>
                 <div class="button-row">
                   <button class="secondary-button" id="ai-analyze-button" type="button">
                     <i data-lucide="sparkles"></i>
                     Przelicz z opisu
                   </button>
+                  <button class="secondary-button ai-photo-button" id="ai-photo-button" type="button">
+                    <i data-lucide="camera"></i>
+                    Rozpoznaj ze zdjęcia
+                    <span class="premium-mini">Premium</span>
+                  </button>
                 </div>
+                <input id="ai-meal-photo" type="file" accept="image/*" capture="environment" hidden>
                 <div id="ai-result" class="ai-result"></div>
               </div>
               </details>
@@ -628,7 +723,7 @@
           </section>
 
           <section class="workspace-grid plan-layout">
-            <div class="panel">
+            <div class="panel plan-form-panel">
               <div class="panel-heading">
                 <h2>Dodaj do planu</h2>
                 <span class="stat-chip">Produkt / przepis / notatka</span>
@@ -683,7 +778,7 @@
               </form>
             </div>
 
-            <div class="panel">
+            <div class="panel planned-meals-panel">
               <div class="panel-heading">
                 <h2>Najbliższe posiłki</h2>
                 <span id="planned-meals-count" class="stat-chip">0</span>
@@ -710,6 +805,10 @@
               <button class="secondary-button" type="button" id="barcode-lookup">
                 <i data-lucide="search"></i>
                 Sprawdz kod
+              </button>
+              <button class="secondary-button native-only" type="button" id="native-barcode-scan">
+                <i data-lucide="camera"></i>
+                Skanuj aparatem
               </button>
               <label class="ghost-button file-button">
                 <i data-lucide="scan-barcode"></i>
@@ -874,11 +973,13 @@
             </div>
           </section>
 
+          <section class="ad-slot" id="recipes-ad-slot" data-ad-slot="recipes" hidden aria-label="Reklama"></section>
+
           <section class="panel ai-recipes-panel">
             <div class="panel-heading">
               <div>
                 <h2>AI dopasuje przepisy</h2>
-                <p id="ai-recipes-summary" class="storage-note">Uzywa celu, preferencji, ostatnich posilkow i Twoich przepisow jako kontekstu RAG.</p>
+              <p id="ai-recipes-summary" class="storage-note">Korzysta z Twojego celu, preferencji, ostatnich posiłków i zapisanych przepisów, żeby lepiej dopasować propozycje.</p>
               </div>
               <button class="primary-button compact" id="generate-ai-recipes" type="button">
                 <i data-lucide="sparkles"></i>
@@ -1044,6 +1145,8 @@
             </div>
           </section>
 
+          <section class="ad-slot" id="trends-ad-slot" data-ad-slot="trends" hidden aria-label="Reklama"></section>
+
           <section class="panel body-forecast-panel">
             <div class="panel-heading">
               <h2>BMI, aktywnosc i prognoza</h2>
@@ -1153,6 +1256,10 @@
                       Dodaj zdjęcie
                       <input id="avatar-input" type="file" accept="image/png,image/jpeg,image/webp">
                     </label>
+                    <button class="secondary-button native-only" id="avatar-native-button" type="button">
+                      <i data-lucide="camera"></i>
+                      Aparat / galeria
+                    </button>
                     <button class="ghost-button" id="remove-avatar" type="button">
                       <i data-lucide="x"></i>
                       Usuń
@@ -1224,6 +1331,14 @@
                   </select>
                 </label>
                 <label>
+                  <span>Język aplikacji</span>
+                  <select id="profile-language">
+                    <option value="auto">Automatycznie</option>
+                    <option value="pl">Polski</option>
+                    <option value="en">English</option>
+                  </select>
+                </label>
+                <label>
                   <span>Kalorie</span>
                   <input id="target-calories" type="number" min="500" step="10">
                 </label>
@@ -1253,7 +1368,7 @@
             <div class="panel">
               <div class="panel-heading">
                 <h2>Personalizacja</h2>
-                <span class="stat-chip">AI / RAG</span>
+                <span class="stat-chip">Dopasowanie</span>
               </div>
               <form id="preferences-form" class="settings-form">
                 <label>
@@ -1347,9 +1462,82 @@
                   <i data-lucide="trash-2"></i>
                   Reset profilu
                 </button>
+                <button class="danger-button" type="button" id="delete-account">
+                  <i data-lucide="user-x"></i>
+                  Usuń konto
+                </button>
               </div>
               <p class="storage-note" id="storage-note"></p>
               <div class="sync-meta" id="sync-meta"></div>
+            </div>
+
+            <div class="panel premium-settings-panel">
+              <div class="panel-heading">
+                <h2>Premium</h2>
+                <span id="premium-plan-chip" class="stat-chip">Free</span>
+              </div>
+              <p class="storage-note" id="premium-settings-note">Premium odblokowuje wieksze limity AI, przepisy i usuwa reklamy.</p>
+              <div class="premium-usage-grid">
+                <div>
+                  <span>Analizy AI posilku</span>
+                  <strong id="premium-ai-meal-usage">0 / 10</strong>
+                </div>
+                <div>
+                  <span>Generacje przepisow</span>
+                  <strong id="premium-ai-recipe-usage">0 / 2</strong>
+                </div>
+              </div>
+              <div class="button-row">
+                <button class="primary-button" id="open-paywall-button" type="button">
+                  <i data-lucide="sparkles"></i>
+                  Zobacz Premium
+                </button>
+                <button class="secondary-button" id="restore-purchases-button" type="button">
+                  <i data-lucide="refresh-cw"></i>
+                  Przywroc zakupy
+                </button>
+                <button class="ghost-button" id="manage-subscription-button" type="button">
+                  <i data-lucide="external-link"></i>
+                  Zarzadzaj subskrypcja
+                </button>
+              </div>
+              <form id="promo-code-form" class="promo-code-form">
+                <label>
+                  <span>Kod testera</span>
+                  <input id="promo-code-input" type="text" autocomplete="off" placeholder="NOURIA-BETA">
+                </label>
+                <button class="secondary-button" type="submit">
+                  <i data-lucide="ticket-check"></i>
+                  Aktywuj kod
+                </button>
+              </form>
+            </div>
+
+            <div class="panel ad-diagnostics-panel admin-only" data-admin-only hidden>
+              <div class="panel-heading">
+                <h2>Diagnostyka reklam</h2>
+                <span class="stat-chip">AdMob</span>
+              </div>
+              <div class="diagnostic-grid" id="ad-diagnostics"></div>
+              <button class="secondary-button" id="refresh-ad-diagnostics" type="button">
+                <i data-lucide="refresh-cw"></i>
+                Odśwież status reklam
+              </button>
+            </div>
+
+            <div class="panel compliance-panel">
+              <div class="panel-heading">
+                <h2>Bezpieczeństwo</h2>
+                <span class="stat-chip">Sklepy</span>
+              </div>
+              <p class="storage-note">
+                Estymacje kalorii, makro i wyniki AI są orientacyjne i nie zastępują porady lekarza ani dietetyka.
+                Wyniki AI możesz edytować przed zapisem.
+              </p>
+              <a class="secondary-button" href="privacy.html" target="_blank" rel="noopener">
+                <i data-lucide="shield-check"></i>
+                Polityka prywatności
+              </a>
             </div>
           </section>
         </section>
@@ -1411,6 +1599,42 @@
               <p class="storage-note">Reset postępów robi backup profilu przed zmianą. Ban i wyłączenie dostępu blokują synchronizację przez RLS.</p>
             </div>
 
+            <div class="panel admin-billing-panel">
+              <div class="panel-heading">
+                <h2>Billing</h2>
+                <span class="stat-chip">Manual grant</span>
+              </div>
+              <form id="admin-billing-form" class="settings-form">
+                <label class="wide">
+                  <span>Email uzytkownika</span>
+                  <input id="admin-billing-email" type="email" placeholder="email@domena.pl">
+                </label>
+                <label>
+                  <span>Entitlement</span>
+                  <select id="admin-billing-entitlement">
+                    <option value="premium_access">Premium</option>
+                    <option value="standard_recipes_pack">Pakiet standardowy</option>
+                    <option value="personalized_recipes_pack">Pakiet personalizowany</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Wazne do</span>
+                  <input id="admin-billing-expires" type="date">
+                </label>
+                <div class="button-row wide">
+                  <button class="primary-button" type="submit">
+                    <i data-lucide="badge-check"></i>
+                    Nadaj
+                  </button>
+                  <button class="danger-button" type="button" id="admin-billing-revoke">
+                    <i data-lucide="x"></i>
+                    Cofnij
+                  </button>
+                </div>
+              </form>
+              <p class="storage-note">Reczne granty sa do testow, obslugi i promocji. Docelowo sklepy aktualizuja je przez RevenueCat webhook.</p>
+            </div>
+
             <div class="panel admin-audit-panel">
               <div class="panel-heading">
                 <h2>Audyt</h2>
@@ -1421,6 +1645,99 @@
           </section>
         </section>
       </main>
+    </div>
+
+    <div class="paywall-backdrop" id="paywall-modal" hidden>
+      <section class="paywall-dialog" role="dialog" aria-modal="true" aria-labelledby="paywall-title">
+        <button class="icon-button paywall-close" id="paywall-close" type="button" aria-label="Zamknij">
+          <i data-lucide="x"></i>
+        </button>
+        <div class="paywall-hero">
+          <span class="section-kicker">Premium</span>
+          <h2 id="paywall-title">Odblokuj inteligentnego asystenta diety</h2>
+          <p id="paywall-reason">Wieksze limity AI, przepisy dopasowane do celu i brak reklam.</p>
+        </div>
+        <div class="premium-card-grid">
+          <article class="premium-plan-card featured">
+            <span class="stat-chip">Najprostszy start</span>
+            <h3>Premium miesiecznie</h3>
+            <strong>19,99 PLN</strong>
+            <p>300 analiz posilku AI, 30 generacji przepisow i zero reklam.</p>
+            <button class="primary-button" type="button" data-buy-product="dd_premium_monthly">
+              <i data-lucide="sparkles"></i>
+              Wybierz miesiac
+            </button>
+          </article>
+          <article class="premium-plan-card">
+            <span class="stat-chip">Najlepsza wartosc</span>
+            <h3>Premium rocznie</h3>
+            <strong>149,99 PLN</strong>
+            <p>Ten sam dostep premium z nizsza cena za miesiac.</p>
+            <button class="secondary-button" type="button" data-buy-product="dd_premium_yearly">
+              <i data-lucide="calendar-check"></i>
+              Wybierz rok
+            </button>
+          </article>
+          <article class="premium-plan-card">
+            <span class="stat-chip">Jednorazowo</span>
+            <h3>Pakiet 50 przepisow</h3>
+            <strong>29,99 PLN</strong>
+            <p>Standardowa biblioteka zostaje na koncie nawet bez subskrypcji.</p>
+            <button class="secondary-button" type="button" data-buy-product="dd_recipe_pack_standard_001">
+              <i data-lucide="book-open"></i>
+              Kup pakiet
+            </button>
+          </article>
+          <article class="premium-plan-card">
+            <span class="stat-chip">Jednorazowo</span>
+            <h3>30 przepisow personalnych</h3>
+            <strong>39,99 PLN</strong>
+            <p>Pakiet wygenerowany pod cel, preferencje i historie posilkow.</p>
+            <button class="secondary-button" type="button" data-buy-product="dd_recipe_pack_personalized_001">
+              <i data-lucide="wand-sparkles"></i>
+              Kup pakiet
+            </button>
+          </article>
+        </div>
+        <div class="paywall-footer">
+          <form id="paywall-promo-form" class="promo-code-form">
+            <label>
+              <span>Masz kod testera?</span>
+              <input id="paywall-promo-code" type="text" autocomplete="off" placeholder="NOURIA-BETA">
+            </label>
+            <button class="secondary-button" type="submit">
+              <i data-lucide="ticket-check"></i>
+              Aktywuj
+            </button>
+          </form>
+          <button class="ghost-button" id="paywall-restore" type="button">
+            <i data-lucide="refresh-cw"></i>
+            Przywroc zakupy
+          </button>
+          <p id="paywall-native-note">Na webie zakupy sa informacyjne. Realny zakup uruchamia sie w aplikacji mobilnej.</p>
+        </div>
+      </section>
+    </div>
+
+    <div class="calendar-backdrop" id="calendar-modal" hidden>
+      <section class="calendar-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-title">
+        <div class="panel-heading compact-heading">
+          <button class="icon-button" id="calendar-prev-month" type="button" aria-label="Poprzedni miesiąc">
+            <i data-lucide="chevron-left"></i>
+          </button>
+          <h2 id="calendar-title">Kalendarz</h2>
+          <button class="icon-button" id="calendar-next-month" type="button" aria-label="Następny miesiąc">
+            <i data-lucide="chevron-right"></i>
+          </button>
+          <button class="icon-button" id="calendar-close" type="button" aria-label="Zamknij">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="calendar-weekdays" aria-hidden="true">
+          <span>Pon</span><span>Wt</span><span>Śr</span><span>Czw</span><span>Pt</span><span>Sob</span><span>Nd</span>
+        </div>
+        <div class="calendar-grid" id="calendar-grid"></div>
+      </section>
     </div>
 
     <div class="toast-area" id="toast-area" aria-live="polite" aria-atomic="true"></div>

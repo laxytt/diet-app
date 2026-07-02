@@ -36,6 +36,12 @@ Deno.serve(async (request): Promise<Response> => {
 
   const body = await request.json().catch(() => ({}));
   const action = String(body.action || '').trim();
+  if (action === 'deleteOwnAccount') {
+    const actor = await requireUser(request, service);
+    if (isAuthResponse(actor)) return actor.response;
+    return json(await deleteOwnAccount(service, actor, body));
+  }
+
   const actor = await requireAdmin(request, service);
   if (isAuthResponse(actor)) return actor.response;
 
@@ -75,6 +81,24 @@ Deno.serve(async (request): Promise<Response> => {
 
 function isAuthResponse(value: AdminAuthResult): value is { response: Response } {
   return 'response' in value;
+}
+
+async function requireUser(request: Request, service: any): Promise<AdminAuthResult> {
+  const authorization = request.headers.get('Authorization') || '';
+  const token = authorization.replace(/^Bearer\s+/i, '').trim();
+  if (!token) {
+    return { response: json({ error: 'Missing authorization token' }, 401) };
+  }
+
+  const { data, error } = await service.auth.getUser(token);
+  if (error || !data.user || !data.user.email) {
+    return { response: json({ error: 'Invalid authorization token' }, 401) };
+  }
+
+  return {
+    user: data.user,
+    email: normalizeEmail(data.user.email)
+  };
 }
 
 async function requireAdmin(request: Request, service: any): Promise<AdminAuthResult> {
@@ -132,8 +156,21 @@ async function listAdminData(service: any) {
     .limit(30);
   if (logsError) throw logsError;
 
+  const { data: billingRows, error: billingError } = await service
+    .from('billing_entitlements')
+    .select('user_id, entitlement, active, source, product_id, store, expires_at, updated_at');
+  if (billingError) throw billingError;
+
+  const { data: usageRows, error: usageError } = await service
+    .from('usage_counters')
+    .select('user_id, period, metric, used, limit, updated_at')
+    .eq('period', currentPeriod());
+  if (usageError) throw usageError;
+
   const profileByUser = new Map((profiles || []).map((profile: any) => [`${profile.user_id}:${profile.profile_id}`, profile]));
   const assignmentByEmail = new Map((assignments || []).map((assignment: any) => [normalizeEmail(assignment.email), assignment]));
+  const billingByUser = groupByUserId(billingRows || []);
+  const usageByUser = groupByUserId(usageRows || []);
 
   const users = (usersData.users || []).map((user: any) => {
     const email = normalizeEmail(user.email || '');
@@ -141,13 +178,19 @@ async function listAdminData(service: any) {
     const profile = assignment && assignment.user_id
       ? profileByUser.get(`${assignment.user_id}:${assignment.profile_id || PROFILE_ID}`) || null
       : null;
-    return summarizeUser(user, assignment, profile);
+    return summarizeUser(user, assignment, profile, billingByUser.get(user.id) || [], usageByUser.get(user.id) || []);
   });
 
   (assignments || []).forEach((assignment: any) => {
     const email = normalizeEmail(assignment.email);
     if (users.some((user: any) => normalizeEmail(user.email) === email)) return;
-    users.push(summarizeUser(null, assignment, null));
+    users.push(summarizeUser(
+      null,
+      assignment,
+      null,
+      assignment.user_id ? billingByUser.get(assignment.user_id) || [] : [],
+      assignment.user_id ? usageByUser.get(assignment.user_id) || [] : []
+    ));
   });
 
   return {
@@ -156,7 +199,7 @@ async function listAdminData(service: any) {
   };
 }
 
-function summarizeUser(user: any, assignment: any, profile: any) {
+function summarizeUser(user: any, assignment: any, profile: any, billingRows: any[] = [], usageRows: any[] = []) {
   const data = profile && profile.data && typeof profile.data === 'object' ? profile.data : {};
   const entries = Array.isArray(data.entries) ? data.entries.length : 0;
   const foods = Array.isArray(data.foods) ? data.foods.length : 0;
@@ -181,8 +224,49 @@ function summarizeUser(user: any, assignment: any, profile: any) {
       revision: profile.revision || 0,
       updatedAt: profile.updated_at,
       stats: { entries, foods, weights, water }
-    } : null
+    } : null,
+    billing: summarizeBilling(billingRows, usageRows)
   };
+}
+
+function groupByUserId(rows: any[]) {
+  return rows.reduce((map: Map<string, any[]>, row: any) => {
+    if (!row || !row.user_id) return map;
+    const key = String(row.user_id);
+    const list = map.get(key) || [];
+    list.push(row);
+    map.set(key, list);
+    return map;
+  }, new Map());
+}
+
+function summarizeBilling(entitlements: any[], usageRows: any[]) {
+  const now = Date.now();
+  const activeEntitlements = (entitlements || [])
+    .filter((row: any) => Boolean(row.active) && (!row.expires_at || new Date(row.expires_at).getTime() > now))
+    .map((row: any) => ({
+      entitlement: row.entitlement,
+      source: row.source,
+      productId: row.product_id,
+      store: row.store,
+      expiresAt: row.expires_at,
+      updatedAt: row.updated_at
+    }));
+  return {
+    plan: activeEntitlements.some((row: any) => row.entitlement === 'premium_access') ? 'premium' : 'free',
+    entitlements: activeEntitlements,
+    usage: (usageRows || []).map((row: any) => ({
+      metric: row.metric,
+      used: row.used || 0,
+      limit: row.limit || 0,
+      period: row.period,
+      updatedAt: row.updated_at
+    }))
+  };
+}
+
+function currentPeriod() {
+  return new Date().toISOString().slice(0, 7);
 }
 
 async function upsertAssignment(service: any, actor: AdminActor, body: any) {
@@ -291,6 +375,55 @@ async function resetProgress(service: any, actor: AdminActor, body: any) {
   });
 
   return { ok: true, revision: nextRevision };
+}
+
+async function deleteOwnAccount(service: any, actor: AdminActor, body: any) {
+  const confirmedEmail = normalizeEmail(body.confirmEmail);
+  if (!confirmedEmail || confirmedEmail !== actor.email) {
+    throw new Error('Email confirmation does not match the current user');
+  }
+
+  const { data: profiles, error: profilesError } = await service
+    .from('diet_profiles')
+    .select('user_id, profile_id, data, revision')
+    .eq('user_id', actor.user.id);
+  if (profilesError) throw profilesError;
+
+  for (const profile of profiles || []) {
+    const { error: backupError } = await service
+      .from('admin_profile_backups')
+      .insert({
+        target_user_id: actor.user.id,
+        target_email: actor.email,
+        profile_id: profile.profile_id || PROFILE_ID,
+        data: profile.data && typeof profile.data === 'object' ? profile.data : {},
+        reason: 'self-delete-account',
+        created_by: actor.user.id,
+        created_by_email: actor.email
+      });
+    if (backupError) throw backupError;
+  }
+
+  await audit(service, actor, 'self-delete-account', actor.email, actor.user.id, {
+    profileCount: Array.isArray(profiles) ? profiles.length : 0
+  });
+
+  const { error: profileDeleteError } = await service
+    .from('diet_profiles')
+    .delete()
+    .eq('user_id', actor.user.id);
+  if (profileDeleteError) throw profileDeleteError;
+
+  const { error: assignmentDeleteError } = await service
+    .from('profile_assignments')
+    .delete()
+    .eq('email', actor.email);
+  if (assignmentDeleteError) throw assignmentDeleteError;
+
+  const { error: userDeleteError } = await service.auth.admin.deleteUser(actor.user.id);
+  if (userDeleteError) throw userDeleteError;
+
+  return { ok: true };
 }
 
 function resetProgressData(data: any) {

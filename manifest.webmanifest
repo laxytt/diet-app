@@ -1,6 +1,6 @@
 {
-  "name": "Dziennik Diety",
-  "short_name": "Dieta",
+  "name": "Nouria",
+  "short_name": "Nouria",
   "description": "Prywatny dziennik kalorii, makro, wagi i posiłków.",
   "start_url": "./index.html",
   "display": "standalone",
@@ -12,6 +12,12 @@
       "sizes": "128x128",
       "type": "image/svg+xml",
       "purpose": "any"
+    },
+    {
+      "src": "assets/app-icon.svg",
+      "sizes": "1024x1024",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }

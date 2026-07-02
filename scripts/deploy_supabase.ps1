@@ -23,7 +23,13 @@ if ([string]::IsNullOrWhiteSpace($env:OPENAI_API_KEY)) {
 & $supabase db push
 & $supabase functions deploy analyze-meal
 & $supabase functions deploy admin-api
+& $supabase functions deploy billing-api
 & $supabase functions deploy recommend-recipes
-& $supabase secrets set "OPENAI_API_KEY=$env:OPENAI_API_KEY" "OPENAI_MODEL=$OpenAIModel"
+
+$secrets = @("OPENAI_API_KEY=$env:OPENAI_API_KEY", "OPENAI_MODEL=$OpenAIModel")
+if (![string]::IsNullOrWhiteSpace($env:REVENUECAT_WEBHOOK_SECRET)) {
+  $secrets += "REVENUECAT_WEBHOOK_SECRET=$env:REVENUECAT_WEBHOOK_SECRET"
+}
+& $supabase secrets set @secrets
 
 Write-Host "supabase-deploy-ok"
